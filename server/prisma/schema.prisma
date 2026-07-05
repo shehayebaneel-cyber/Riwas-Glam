@@ -67,10 +67,20 @@ model GiftCard {
   createdAt      DateTime @default(now())
 }
 
-// Simple key/value settings store the manager controls (gift-card config, etc.).
+// Simple key/value settings store the manager controls (gift-card config,
+// site content, etc.).
 model Setting {
   key   String @id
   value String @default("")
+}
+
+// An image uploaded by the manager (hero, category, gallery, avatars…). Stored
+// as bytes so no external file host is needed. Served at GET /api/images/:id.
+model Image {
+  id        String   @id @default(cuid())
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
 }
 
 // A customer review — held for manager moderation, then shown on the site.

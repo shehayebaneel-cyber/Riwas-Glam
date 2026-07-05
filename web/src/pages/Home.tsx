@@ -30,7 +30,11 @@ export function Home() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:py-24 lg:grid-cols-2">
           <div>
             <p className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.28em] text-brand"><span className="h-px w-10 bg-accent" /> {SITE.tagline}</p>
-            <h1 className="mt-6 font-display text-5xl font-extrabold leading-[1.06] text-ink sm:text-6xl">Look your best,<br /><span className="italic text-brand">feel your best.</span></h1>
+            <h1 className="mt-6 font-display text-5xl font-extrabold leading-[1.06] text-ink sm:text-6xl">
+              {SITE.heroTitle.split("\n").map((ln, i, arr) => (
+                <span key={i}>{i > 0 && <br />}<span className={i === arr.length - 1 ? "italic text-brand" : ""}>{ln}</span></span>
+              ))}
+            </h1>
             <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">{SITE.heroSub}</p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Link to="/book" className="btn btn-primary px-8 py-4 text-lg">Book Appointment</Link>
@@ -93,9 +97,9 @@ export function Home() {
             <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Gallery</h2>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {SITE.gallery.map((src, i) => (
+            {SITE.galleryItems.slice(0, 6).map((it, i) => (
               <Link key={i} to="/gallery" className="lift group aspect-square overflow-hidden rounded-2xl bg-surface">
-                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                <img src={it.src} alt="" loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
               </Link>
             ))}
           </div>

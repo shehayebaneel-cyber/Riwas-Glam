@@ -8,8 +8,9 @@ import { SALON } from "./config.js";
 import { availableSlots, pickFreeStaff, type DaySchedule } from "./lib/slots.js";
 
 const app = express();
+app.set("trust proxy", true); // Render terminates TLS; trust x-forwarded-proto for absolute image URLs
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "12mb" })); // room for base64 image uploads
 
 const STR = (v: unknown, max = 200) => String(v ?? "").trim().slice(0, max);
 const NUM = (v: unknown, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -349,6 +350,111 @@ app.patch("/api/admin/settings/giftcard", requireAdmin, async (req, res) => {
   };
   await setSetting("giftcard", next);
   res.json(next);
+});
+
+// ---- Editable site content (text + photos the manager controls) ----
+// Defaults mirror the salon's launch content; admin edits are stored as overrides.
+const SITE_CONTENT_DEFAULT = {
+  name: "Riwa's Glam",
+  tagline: "Hair · Nails · Beauty",
+  heroTitle: "Look your best,\nfeel your best.",
+  heroSub: "Premium hair, nails and beauty in a calm, welcoming space. Book your appointment online in under a minute.",
+  heroImage: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=1000&q=80&auto=format&fit=crop",
+  phone: "+961 78 910 551",
+  whatsapp: "96178910551",
+  email: "hello@riwasglam.beauty",
+  address: "Ain Hala Entrance, Aley, Lebanon",
+  instagram: "riwasglam",
+  mapUrl: "https://www.google.com/maps/search/?api=1&query=Ain+Hala+Aley+Lebanon",
+  aboutTitle: "Where beauty meets care",
+  about: "At Riwa's Glam we believe every visit should feel like a treat. Our team of specialists blends skill, quality products and a warm atmosphere to help you leave glowing — whether it's flawless makeup, stunning lashes, perfect nails or a special-occasion glam.",
+  why: [
+    { icon: "✨", title: "Expert specialists", text: "A dedicated pro for every service — makeup, lashes, nails, brows & more." },
+    { icon: "🧼", title: "Clean & hygienic", text: "Sterilised tools and a spotless, welcoming space." },
+    { icon: "💖", title: "Personalised care", text: "Looks tailored to you, from natural glow to full glam." },
+    { icon: "📅", title: "Easy online booking", text: "Book your specialist in seconds — reschedule anytime." },
+  ],
+  hours: [
+    { day: "Sunday", value: "11:00 – 18:00" },
+    { day: "Monday", value: "Closed" },
+    { day: "Tuesday", value: "10:00 – 19:00" },
+    { day: "Wednesday", value: "10:00 – 19:00" },
+    { day: "Thursday", value: "10:00 – 19:00" },
+    { day: "Friday", value: "10:00 – 20:00" },
+    { day: "Saturday", value: "10:00 – 20:00" },
+  ],
+  categoryImages: {
+    Makeup: "https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=700&q=80&auto=format&fit=crop",
+    Lashes: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=700&q=80&auto=format&fit=crop",
+    Nails: "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=700&q=80&auto=format&fit=crop",
+    "Brows & Face": "https://images.unsplash.com/photo-1522337660859-02fbefca4702?w=700&q=80&auto=format&fit=crop",
+    Skincare: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=700&q=80&auto=format&fit=crop",
+    Aesthetics: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=700&q=80&auto=format&fit=crop",
+    Tattoos: "https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?w=700&q=80&auto=format&fit=crop",
+  } as Record<string, string>,
+  featured: ["Bridal Makeup", "Volume", "Full Set Fiber / Poly", "Deep Facial", "Brow Lamination", "Full Glam"],
+  galleryCats: ["All", "Makeup", "Nails", "Lashes", "Brows", "Hair", "Before & After"],
+  galleryItems: [
+    { src: "https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=700&q=80&auto=format&fit=crop", cat: "Makeup" },
+    { src: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=700&q=80&auto=format&fit=crop", cat: "Makeup" },
+    { src: "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=700&q=80&auto=format&fit=crop", cat: "Nails" },
+    { src: "https://images.unsplash.com/photo-1522337660859-02fbefca4702?w=700&q=80&auto=format&fit=crop", cat: "Nails" },
+    { src: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=700&q=80&auto=format&fit=crop", cat: "Lashes" },
+    { src: "https://images.unsplash.com/photo-1583001931096-959e9a1a6223?w=700&q=80&auto=format&fit=crop", cat: "Lashes" },
+    { src: "https://images.unsplash.com/photo-1526047932273-341f2a7631f9?w=700&q=80&auto=format&fit=crop", cat: "Brows" },
+    { src: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=700&q=80&auto=format&fit=crop", cat: "Hair" },
+    { src: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=700&q=80&auto=format&fit=crop", cat: "Before & After" },
+    { src: "https://images.unsplash.com/photo-1512257960867-c56cb1b3d9c8?w=700&q=80&auto=format&fit=crop", cat: "Before & After" },
+  ],
+};
+const currentContent = async () => ({ ...SITE_CONTENT_DEFAULT, ...(await getSetting("siteContent", {} as Record<string, unknown>)) });
+
+app.get("/api/site-content", async (_req, res) => res.json(await currentContent()));
+app.patch("/api/admin/site-content", requireAdmin, async (req, res) => {
+  const b = req.body ?? {};
+  const cur = await currentContent();
+  const arrStr = (v: unknown) => (Array.isArray(v) ? v.map((x) => STR(x, 600)).filter(Boolean) : undefined);
+  const next = {
+    name: b.name !== undefined ? STR(b.name, 80) : cur.name,
+    tagline: b.tagline !== undefined ? STR(b.tagline, 120) : cur.tagline,
+    heroTitle: b.heroTitle !== undefined ? STR(b.heroTitle, 140) : cur.heroTitle,
+    heroSub: b.heroSub !== undefined ? STR(b.heroSub, 400) : cur.heroSub,
+    heroImage: b.heroImage !== undefined ? STR(b.heroImage, 600) : cur.heroImage,
+    phone: b.phone !== undefined ? STR(b.phone, 40) : cur.phone,
+    whatsapp: b.whatsapp !== undefined ? STR(b.whatsapp, 30) : cur.whatsapp,
+    email: b.email !== undefined ? STR(b.email, 120) : cur.email,
+    address: b.address !== undefined ? STR(b.address, 200) : cur.address,
+    instagram: b.instagram !== undefined ? STR(b.instagram, 60) : cur.instagram,
+    mapUrl: b.mapUrl !== undefined ? STR(b.mapUrl, 600) : cur.mapUrl,
+    aboutTitle: b.aboutTitle !== undefined ? STR(b.aboutTitle, 120) : cur.aboutTitle,
+    about: b.about !== undefined ? STR(b.about, 2000) : cur.about,
+    why: Array.isArray(b.why) ? b.why.slice(0, 8).map((w: Record<string, unknown>) => ({ icon: STR(w?.icon, 8), title: STR(w?.title, 80), text: STR(w?.text, 300) })) : cur.why,
+    hours: Array.isArray(b.hours) ? b.hours.slice(0, 7).map((h: Record<string, unknown>) => ({ day: STR(h?.day, 20), value: STR(h?.value, 40) })) : cur.hours,
+    categoryImages: b.categoryImages && typeof b.categoryImages === "object" ? Object.fromEntries(Object.entries(b.categoryImages).map(([k, v]) => [STR(k, 60), STR(v, 600)])) : cur.categoryImages,
+    featured: arrStr(b.featured) ?? cur.featured,
+    galleryCats: arrStr(b.galleryCats) ?? cur.galleryCats,
+    galleryItems: Array.isArray(b.galleryItems) ? b.galleryItems.slice(0, 120).map((g: Record<string, unknown>) => ({ src: STR(g?.src, 600), cat: STR(g?.cat, 60) })).filter((g: { src: string }) => g.src) : cur.galleryItems,
+  };
+  await setSetting("siteContent", next);
+  res.json(next);
+});
+
+// Image upload (base64 data URL in JSON) + public serving.
+app.post("/api/admin/images", requireAdmin, async (req, res) => {
+  const dataUrl = String(req.body?.dataUrl ?? "");
+  const m = /^data:([\w/+.-]+);base64,(.+)$/s.exec(dataUrl);
+  if (!m || !m[1].startsWith("image/")) return res.status(400).json({ error: "Not a valid image." });
+  const buf = Buffer.from(m[2], "base64");
+  if (buf.length > 6_000_000) return res.status(413).json({ error: "Image too large (max ~6MB). Try a smaller photo." });
+  const img = await prisma.image.create({ data: { mime: m[1], data: buf } });
+  res.json({ id: img.id, url: `${req.protocol}://${req.get("host")}/api/images/${img.id}` });
+});
+app.get("/api/images/:id", async (req, res) => {
+  const img = await prisma.image.findUnique({ where: { id: String(req.params.id) } });
+  if (!img) return res.status(404).end();
+  res.set("Content-Type", img.mime);
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(img.data);
 });
 
 // ---- Customer accounts ----

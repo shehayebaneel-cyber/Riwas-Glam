@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
+import { api } from "./lib/api";
 import { Home } from "./pages/Home";
 import { Book } from "./pages/Book";
 import { Admin } from "./pages/Admin";
@@ -10,6 +12,16 @@ import { Gallery } from "./pages/Gallery";
 import { SITE } from "./config";
 
 export default function App() {
+  // Hydrate the site's editable content (text + photos) from the backend, then
+  // re-render so every page shows the manager's latest edits. Falls back to the
+  // built-in defaults in config.ts if the request fails or is still loading.
+  const [, bump] = useState(0);
+  useEffect(() => {
+    api.get<Partial<typeof SITE>>("/api/site-content")
+      .then((c) => { Object.assign(SITE, c); bump((v) => v + 1); })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       <Routes>

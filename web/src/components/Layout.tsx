@@ -3,8 +3,6 @@ import { Link } from "react-router-dom";
 import { SITE } from "../config";
 import { useCustomer } from "../context/CustomerAuth";
 
-const wa = `https://wa.me/${SITE.whatsapp}`;
-
 function Nav() {
   const { customer } = useCustomer();
   return (
@@ -29,6 +27,7 @@ function Nav() {
 }
 
 function Footer() {
+  const wa = `https://wa.me/${SITE.whatsapp}`;
   return (
     <footer className="border-t border-border bg-surface">
       <div className="mx-auto max-w-6xl px-4 py-10 text-center">
