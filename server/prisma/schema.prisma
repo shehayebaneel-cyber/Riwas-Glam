@@ -30,6 +30,7 @@ model Service {
   description String   @default("")
   durationMin Int      @default(30)
   price       Float    @default(0)
+  materialCost Float   @default(0) // est. product/material cost per service — feeds profit
   isActive    Boolean  @default(true)
   sortOrder   Int      @default(0)
   staff       Staff[]  @relation("ServiceStaff") // the specialists who perform this service
@@ -95,6 +96,19 @@ model Review {
   status        String   @default("PENDING") // PENDING | APPROVED | HIDDEN
   featured      Boolean  @default(false)
   createdAt     DateTime @default(now())
+}
+
+// A running-cost the salon pays (rent, electricity, supplies, salaries…). Used to
+// turn gross profit into net profit on the finance dashboard.
+model Expense {
+  id        Int      @id @default(autoincrement())
+  category  String   @default("Other") // Rent | Utilities | Supplies | Marketing | Salaries | Equipment | Other
+  label     String   @default("")
+  amount    Float    @default(0)
+  date      String   // YYYY-MM-DD
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  @@index([date])
 }
 
 model AddOn {

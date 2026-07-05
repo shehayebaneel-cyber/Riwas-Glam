@@ -52,7 +52,8 @@ app.get("/api/catalog", async (_req, res) => {
       addOns: { where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
     },
   });
-  res.json(cats.filter((c) => c.services.length > 0));
+  // Strip internal-only fields (materialCost) from the public payload.
+  res.json(cats.filter((c) => c.services.length > 0).map((c) => ({ ...c, services: c.services.map(({ materialCost, ...s }) => s) })));
 });
 
 // Resolve a booking: service, add-ons, totals, and the eligible specialists.
@@ -190,6 +191,7 @@ app.patch("/api/admin/services/:id", requireAdmin, async (req, res) => {
   if (b.description !== undefined) data.description = STR(b.description, 600);
   if (b.durationMin !== undefined) data.durationMin = Math.max(5, NUM(b.durationMin, 30));
   if (b.price !== undefined) data.price = Math.max(0, NUM(b.price, 0));
+  if (b.materialCost !== undefined) data.materialCost = Math.max(0, NUM(b.materialCost, 0));
   if (b.isActive !== undefined) data.isActive = !!b.isActive;
   if (b.categoryId !== undefined) data.categoryId = Number(b.categoryId);
   res.json(await prisma.service.update({ where: { id: Number(req.params.id) }, data }));
@@ -455,6 +457,67 @@ app.get("/api/images/:id", async (req, res) => {
   res.set("Content-Type", img.mime);
   res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.send(img.data);
+});
+
+// ---- Finances: expenses + revenue/profit analytics ----
+app.get("/api/admin/expenses", requireAdmin, async (req, res) => {
+  const from = STR(req.query.from), to = STR(req.query.to);
+  const where = isDate(from) && isDate(to) ? { date: { gte: from, lte: to } } : {};
+  res.json(await prisma.expense.findMany({ where, orderBy: [{ date: "desc" }, { id: "desc" }] }));
+});
+app.post("/api/admin/expenses", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const date = STR(b.date);
+  if (!isDate(date)) return res.status(400).json({ error: "A valid date is required." });
+  res.json(await prisma.expense.create({ data: { category: STR(b.category, 40) || "Other", label: STR(b.label, 120), amount: Math.max(0, NUM(b.amount, 0)), date, note: STR(b.note, 300) } }));
+});
+app.patch("/api/admin/expenses/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.category !== undefined) data.category = STR(b.category, 40);
+  if (b.label !== undefined) data.label = STR(b.label, 120);
+  if (b.amount !== undefined) data.amount = Math.max(0, NUM(b.amount, 0));
+  if (b.date !== undefined && isDate(STR(b.date))) data.date = STR(b.date);
+  if (b.note !== undefined) data.note = STR(b.note, 300);
+  res.json(await prisma.expense.update({ where: { id: Number(req.params.id) }, data }));
+});
+app.delete("/api/admin/expenses/:id", requireAdmin, async (req, res) => { await prisma.expense.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
+// Revenue & profit for a date range. Profit = revenue − materials − commissions − expenses.
+app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
+  const from = STR(req.query.from), to = STR(req.query.to);
+  if (!isDate(from) || !isDate(to)) return res.status(400).json({ error: "from and to (YYYY-MM-DD) are required." });
+  const appts = await prisma.appointment.findMany({
+    where: { date: { gte: from, lte: to }, status: { in: ["CONFIRMED", "COMPLETED"] } },
+    include: { service: { select: { materialCost: true, category: { select: { name: true } } } } },
+  });
+  const expenses = await prisma.expense.findMany({ where: { date: { gte: from, lte: to } } });
+
+  let revenue = 0, material = 0, commission = 0;
+  const byCat: Record<string, number> = {}, byStaff: Record<string, number> = {};
+  const byService: Record<string, { revenue: number; material: number; commission: number; count: number }> = {};
+  const daily: Record<string, number> = {};
+  for (const a of appts) {
+    const mc = a.service?.materialCost ?? 0;
+    revenue += a.price; material += mc; commission += a.commissionAmount;
+    const cat = a.service?.category?.name ?? "Other"; byCat[cat] = (byCat[cat] ?? 0) + a.price;
+    const st = a.staffName || "Unassigned"; byStaff[st] = (byStaff[st] ?? 0) + a.price;
+    const sv = a.serviceName || "Service";
+    if (!byService[sv]) byService[sv] = { revenue: 0, material: 0, commission: 0, count: 0 };
+    byService[sv].revenue += a.price; byService[sv].material += mc; byService[sv].commission += a.commissionAmount; byService[sv].count++;
+    daily[a.date] = (daily[a.date] ?? 0) + a.price;
+  }
+  const expensesTotal = expenses.reduce((s, e) => s + e.amount, 0);
+  const grossProfit = revenue - material - commission;
+  const count = appts.length;
+  const toArr = (o: Record<string, number>) => Object.entries(o).map(([name, value]) => ({ name, value: round2(value) })).sort((x, y) => y.value - x.value);
+  const serviceRows = Object.entries(byService).map(([name, v]) => ({ name, count: v.count, revenue: round2(v.revenue), profit: round2(v.revenue - v.material - v.commission) })).sort((x, y) => y.revenue - x.revenue);
+  const daySeries = Object.entries(daily).map(([date, value]) => ({ date, value: round2(value) })).sort((x, y) => (x.date < y.date ? -1 : 1));
+  res.json({
+    revenue: round2(revenue), material: round2(material), commission: round2(commission), expenses: round2(expensesTotal),
+    grossProfit: round2(grossProfit), netProfit: round2(grossProfit - expensesTotal),
+    appointments: count, avgTicket: count ? round2(revenue / count) : 0,
+    bestService: serviceRows[0]?.name ?? "—", topStaff: toArr(byStaff)[0]?.name ?? "—",
+    byCategory: toArr(byCat), byStaff: toArr(byStaff), byService: serviceRows, daily: daySeries,
+  });
 });
 
 // ---- Customer accounts ----
