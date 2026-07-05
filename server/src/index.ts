@@ -196,7 +196,7 @@ function permForPath(p: string): string {
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
   if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
   if (p.includes("/promos")) return "marketing";
-  if (p.includes("/site-content") || p.includes("/admin/images")) return "website";
+  if (p.includes("/site-content") || p.includes("/admin/images") || p.includes("/gallery")) return "website";
   if (p.includes("/staff")) return "team";
   if (p.includes("/gift-cards") || p.includes("/settings/giftcard")) return "giftcards";
   if (p.includes("/reviews")) return "reviews";
@@ -671,6 +671,35 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
     },
   });
 });
+
+// ---- Gallery ----
+async function galleryWithNames(items: { serviceId: number | null }[]) {
+  const svc = await prisma.service.findMany({ select: { id: true, name: true } });
+  const map = new Map(svc.map((s) => [s.id, s.name]));
+  return items.map((i) => ({ ...i, serviceName: i.serviceId ? map.get(i.serviceId) ?? "" : "" }));
+}
+app.get("/api/gallery", async (_req, res) => res.json(await galleryWithNames(await prisma.galleryItem.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "desc" }] }))));
+app.get("/api/admin/gallery", requireAdmin, async (_req, res) => res.json(await galleryWithNames(await prisma.galleryItem.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "desc" }] }))));
+app.post("/api/admin/gallery", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const type = ["IMAGE", "VIDEO", "BEFOREAFTER"].includes(STR(b.type, 12).toUpperCase()) ? STR(b.type, 12).toUpperCase() : "IMAGE";
+  res.json(await prisma.galleryItem.create({ data: {
+    type, url: STR(b.url, 600), beforeUrl: STR(b.beforeUrl, 600), category: STR(b.category, 60), caption: STR(b.caption, 160),
+    serviceId: b.serviceId ? Number(b.serviceId) : null,
+  } }));
+});
+app.patch("/api/admin/gallery/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.type !== undefined) data.type = ["IMAGE", "VIDEO", "BEFOREAFTER"].includes(STR(b.type, 12).toUpperCase()) ? STR(b.type, 12).toUpperCase() : "IMAGE";
+  if (b.url !== undefined) data.url = STR(b.url, 600);
+  if (b.beforeUrl !== undefined) data.beforeUrl = STR(b.beforeUrl, 600);
+  if (b.category !== undefined) data.category = STR(b.category, 60);
+  if (b.caption !== undefined) data.caption = STR(b.caption, 160);
+  if (b.serviceId !== undefined) data.serviceId = b.serviceId ? Number(b.serviceId) : null;
+  if (b.sortOrder !== undefined) data.sortOrder = NUM(b.sortOrder, 0);
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  res.json(await prisma.galleryItem.update({ where: { id: Number(req.params.id) }, data }));
+});
+app.delete("/api/admin/gallery/:id", requireAdmin, async (req, res) => { await prisma.galleryItem.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
 
 // ---- Academy / courses ----
 const courseOut = (c: { includes: string }) => ({ ...c, includes: parseArr(c.includes) });

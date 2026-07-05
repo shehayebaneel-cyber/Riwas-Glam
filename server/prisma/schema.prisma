@@ -84,6 +84,20 @@ model ServiceProduct {
   @@unique([serviceId, productId])
 }
 
+// A gallery item shown on the Gallery page — photo, video, or before/after.
+model GalleryItem {
+  id        Int      @id @default(autoincrement())
+  type      String   @default("IMAGE") // IMAGE | VIDEO | BEFOREAFTER
+  url       String   @default("") // image, video URL, or the "after" image
+  beforeUrl String   @default("") // the "before" image (BEFOREAFTER only)
+  category  String   @default("")
+  caption   String   @default("")
+  serviceId Int? // link to a service for the "Book this look" button
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 // A training course offered by the academy (lash, makeup…). Managed in admin.
 model Course {
   id          Int      @id @default(autoincrement())

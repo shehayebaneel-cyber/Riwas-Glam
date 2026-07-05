@@ -19,6 +19,7 @@ import { LoyaltyAdmin } from "../components/LoyaltyAdmin";
 import { WaitlistAdmin } from "../components/WaitlistAdmin";
 import { CustomersAdmin } from "../components/CustomersAdmin";
 import { PromoAdmin } from "../components/PromoAdmin";
+import { GalleryAdmin } from "../components/GalleryAdmin";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -29,9 +30,9 @@ const BADGE: Record<string, string> = {
   NO_SHOW: "bg-amber-400/15 text-amber-600",
 };
 
-type Tab = "home" | "bookings" | "customers" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist" | "marketing";
-const TABS: [Tab, string][] = [["home", "🏠 Home"], ["bookings", "Bookings"], ["waitlist", "Waitlist"], ["customers", "Customers"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["marketing", "Marketing"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]];
-const TAB_PERM: Record<Tab, string> = { home: "finances", bookings: "bookings", customers: "bookings", waitlist: "waitlist", calendar: "calendar", finances: "finances", inventory: "inventory", payouts: "payouts", services: "services", staff: "team", academy: "academy", packages: "packages", loyalty: "loyalty", marketing: "marketing", website: "website", giftcards: "giftcards", reviews: "reviews", reports: "reports" };
+type Tab = "home" | "bookings" | "customers" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist" | "marketing" | "gallery";
+const TABS: [Tab, string][] = [["home", "🏠 Home"], ["bookings", "Bookings"], ["waitlist", "Waitlist"], ["customers", "Customers"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["marketing", "Marketing"], ["gallery", "Gallery"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]];
+const TAB_PERM: Record<Tab, string> = { home: "finances", bookings: "bookings", customers: "bookings", waitlist: "waitlist", calendar: "calendar", finances: "finances", inventory: "inventory", payouts: "payouts", services: "services", staff: "team", academy: "academy", packages: "packages", loyalty: "loyalty", marketing: "marketing", gallery: "website", website: "website", giftcards: "giftcards", reviews: "reviews", reports: "reports" };
 
 export function Admin() {
   const [key, setKey] = useState(() => localStorage.getItem(KEY) ?? "");
@@ -129,6 +130,7 @@ export function Admin() {
       {tab === "packages" && <div className="mt-5"><PackagesAdmin adminKey={key} /></div>}
       {tab === "loyalty" && <div className="mt-5"><LoyaltyAdmin adminKey={key} /></div>}
       {tab === "marketing" && <div className="mt-5"><PromoAdmin adminKey={key} /></div>}
+      {tab === "gallery" && <div className="mt-5"><GalleryAdmin adminKey={key} /></div>}
       {tab === "waitlist" && <div className="mt-5"><WaitlistAdmin adminKey={key} /></div>}
       {tab === "customers" && <div className="mt-5"><CustomersAdmin adminKey={key} /></div>}
       {tab === "giftcards" && <div className="mt-5"><GiftCardsAdmin adminKey={key} /></div>}

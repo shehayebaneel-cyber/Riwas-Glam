@@ -11,11 +11,14 @@ export function Home() {
   const [catalog, setCatalog] = useState<Category[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [reviews, setReviews] = useState<{ avg: number; count: number; items: Review[] } | null>(null);
+  const [gallery, setGallery] = useState<string[]>([]);
   useEffect(() => {
     api.get<Category[]>("/api/catalog").then(setCatalog).catch(() => {});
     api.get<Staff[]>("/api/staff").then(setStaff).catch(() => {});
     api.get<{ avg: number; count: number; items: Review[] }>("/api/reviews").then(setReviews).catch(() => {});
+    api.get<{ type: string; url: string; beforeUrl: string }[]>("/api/gallery").then((g) => setGallery(g.map((x) => x.type === "BEFOREAFTER" ? x.beforeUrl : x.url).filter(Boolean))).catch(() => {});
   }, []);
+  const galleryImgs = gallery.length ? gallery : SITE.galleryItems.map((i) => i.src);
   const wa = `https://wa.me/${SITE.whatsapp}`;
   const navigate = useNavigate();
   const allSvc = catalog.flatMap((c) => c.services.map((s) => ({ s, cat: c.name })));
@@ -97,9 +100,9 @@ export function Home() {
             <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Gallery</h2>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {SITE.galleryItems.slice(0, 6).map((it, i) => (
+            {galleryImgs.slice(0, 6).map((src, i) => (
               <Link key={i} to="/gallery" className="lift group aspect-square overflow-hidden rounded-2xl bg-surface">
-                <img src={it.src} alt="" loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
               </Link>
             ))}
           </div>
