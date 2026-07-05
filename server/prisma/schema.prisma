@@ -185,6 +185,25 @@ model Staff {
   blockedDates  String   @default("[]") // JSON ["YYYY-MM-DD"] — days off / holidays
   services      Service[] @relation("ServiceStaff")
   appointments  Appointment[]
+  payouts       Payout[]
+}
+
+// A recorded staff payout for a period — the payslip + payout history.
+model Payout {
+  id               Int      @id @default(autoincrement())
+  staffId          Int
+  staff            Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  periodFrom       String   // YYYY-MM-DD
+  periodTo         String
+  appointments     Int      @default(0)
+  revenue          Float    @default(0)
+  commissionEarned Float    @default(0)
+  bonus            Float    @default(0)
+  tips             Float    @default(0)
+  deduction        Float    @default(0)
+  total            Float    @default(0) // commission + bonus + tips − deduction
+  note             String   @default("")
+  paidAt           DateTime @default(now())
 }
 
 model Appointment {

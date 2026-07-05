@@ -640,6 +640,37 @@ app.put("/api/admin/services/:id/recipe", requireAdmin, async (req, res) => {
   res.json({ ok: true, materialCost });
 });
 
+// ---- Staff payouts ----
+// Computed earnings per staff for a period (from COMPLETED appointments' snapshots).
+app.get("/api/admin/payouts", requireAdmin, async (req, res) => {
+  const from = STR(req.query.from), to = STR(req.query.to);
+  if (!isDate(from) || !isDate(to)) return res.status(400).json({ error: "from and to (YYYY-MM-DD) are required." });
+  const staff = await prisma.staff.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  const appts = await prisma.appointment.findMany({ where: { date: { gte: from, lte: to }, status: "COMPLETED", staffId: { not: null } } });
+  const map: Record<number, { appointments: number; revenue: number; commission: number }> = {};
+  for (const a of appts) { const k = a.staffId as number; if (!map[k]) map[k] = { appointments: 0, revenue: 0, commission: 0 }; map[k].appointments++; map[k].revenue += a.price; map[k].commission += a.commissionAmount; }
+  res.json(staff.map((s) => ({
+    staffId: s.id, name: s.name, role: s.role, commissionPct: s.commissionPct,
+    appointments: map[s.id]?.appointments ?? 0, revenue: round2(map[s.id]?.revenue ?? 0), commissionEarned: round2(map[s.id]?.commission ?? 0),
+  })));
+});
+// Record a payout (recomputes money server-side; client only supplies bonus/tips/deduction).
+app.post("/api/admin/payouts", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const staffId = Number(b.staffId); const from = STR(b.from), to = STR(b.to);
+  if (!staffId || !isDate(from) || !isDate(to)) return res.status(400).json({ error: "staffId, from and to are required." });
+  const appts = await prisma.appointment.findMany({ where: { staffId, date: { gte: from, lte: to }, status: "COMPLETED" } });
+  const revenue = round2(appts.reduce((s, a) => s + a.price, 0));
+  const commissionEarned = round2(appts.reduce((s, a) => s + a.commissionAmount, 0));
+  const bonus = Math.max(0, NUM(b.bonus, 0)), tips = Math.max(0, NUM(b.tips, 0)), deduction = Math.max(0, NUM(b.deduction, 0));
+  const total = round2(commissionEarned + bonus + tips - deduction);
+  res.json(await prisma.payout.create({ data: { staffId, periodFrom: from, periodTo: to, appointments: appts.length, revenue, commissionEarned, bonus, tips, deduction, total, note: STR(b.note, 300) } }));
+});
+app.get("/api/admin/payouts/history", requireAdmin, async (req, res) => {
+  const staffId = Number(req.query.staffId);
+  res.json(await prisma.payout.findMany({ where: staffId ? { staffId } : {}, orderBy: { id: "desc" }, take: 200, include: { staff: { select: { name: true } } } }));
+});
+app.delete("/api/admin/payouts/:id", requireAdmin, async (req, res) => { await prisma.payout.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
 // ---- Customer accounts ----
 const CUSTOMER_SECRET = process.env.CUSTOMER_SECRET || ADMIN_KEY + "::customer";
 const signCustomer = (id: number) => `${id}.${crypto.createHmac("sha256", CUSTOMER_SECRET).update(String(id)).digest("hex")}`;
