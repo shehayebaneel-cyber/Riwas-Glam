@@ -1,6 +1,7 @@
 // In dev, VITE_API_URL is empty and Vite proxies /api → :4200.
-// In production (and in the future mobile app), set VITE_API_URL to the hosted API.
-const BASE = import.meta.env.VITE_API_URL ?? "";
+// In production, calls go to the hosted API. VITE_API_URL overrides if set;
+// otherwise production builds fall back to the deployed Render backend.
+const BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "" : "https://riwasglam-api.onrender.com");
 
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(BASE + path, {

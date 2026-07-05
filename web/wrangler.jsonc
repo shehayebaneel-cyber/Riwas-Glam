@@ -1,0 +1,11 @@
+{
+  // Cloudflare static-assets deployment for the Riwa's Glam frontend.
+  // `npm run build` outputs to ./dist; wrangler serves it as a static site.
+  // single-page-application => any unknown path returns index.html (React Router).
+  "name": "riwas-glam",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
