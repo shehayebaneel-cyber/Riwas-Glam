@@ -573,7 +573,7 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
   const months: string[] = []; for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, mo - i, 1)); months.push(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`); }
   const sixStart = months[0] + "-01";
 
-  const [apptsMonth, expMonth, appts6, exp6, staff, products, giftCards, pendingReviews] = await Promise.all([
+  const [apptsMonth, expMonth, appts6, exp6, staff, products, giftCards, pendingReviews, waitlist] = await Promise.all([
     prisma.appointment.findMany({ where: { date: { gte: monthStart, lte: monthEnd }, status: { in: ["CONFIRMED", "COMPLETED"] } }, include: { service: { select: { materialCost: true, category: { select: { name: true } } } } } }),
     prisma.expense.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.appointment.findMany({ where: { date: { gte: sixStart, lte: monthEnd }, status: { in: ["CONFIRMED", "COMPLETED"] } }, include: { service: { select: { materialCost: true } } } }),
@@ -582,6 +582,7 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
     prisma.product.findMany({ where: { isActive: true } }),
     prisma.giftCard.findMany({ where: { createdAt: { gte: new Date(monthStart + "T00:00:00Z") } } }),
     prisma.review.count({ where: { status: "PENDING" } }),
+    prisma.waitlistEntry.count({ where: { status: "WAITING" } }),
   ]);
 
   type A = { price: number; commissionAmount: number; service: { materialCost: number } | null };
@@ -608,7 +609,7 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
   res.json({
     today: { bookings: apptsToday.length, revenue: round2(tC.rev), profit: round2(tC.rev - tC.mat - tC.com - expToday.reduce((s, e) => s + e.amount, 0)) },
     month: { revenue: round2(mC.rev), profit: round2(mC.rev - mC.mat - mC.com - expMonth.reduce((s, e) => s + e.amount, 0)) },
-    workingToday, commissionOwed: round2(mC.com), pendingReviews,
+    workingToday, commissionOwed: round2(mC.com), pendingReviews, waitlist,
     lowStock: { count: low.length, items: low.slice(0, 6).map((p) => ({ name: p.name, quantity: p.quantity, unit: p.unit })) },
     giftCards: { count: giftCards.length, value: round2(giftCards.reduce((s, c) => s + c.initialValue, 0)) },
     bestServices: top(svc), mostBookedStaff: top(stf),
@@ -687,6 +688,30 @@ app.patch("/api/admin/packages/:id", requireAdmin, async (req, res) => {
   res.json((await packagesWithNames([p]))[0]);
 });
 app.delete("/api/admin/packages/:id", requireAdmin, async (req, res) => { await prisma.package.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
+// ---- Waiting list ----
+app.post("/api/waitlist", async (req, res) => {
+  const b = req.body ?? {}; const name = STR(b.name, 80), phone = STR(b.phone, 40);
+  if (!name || !phone) return res.status(400).json({ error: "Your name and phone are required." });
+  const entry = await prisma.waitlistEntry.create({ data: {
+    customerId: optionalCustomerId(req) ?? null, name, phone,
+    serviceId: b.serviceId ? Number(b.serviceId) : null, serviceName: STR(b.serviceName, 120),
+    staffId: b.staffId ? Number(b.staffId) : null, staffName: STR(b.staffName, 80),
+    preferredDate: isDate(STR(b.preferredDate)) ? STR(b.preferredDate) : "", preferredTime: STR(b.preferredTime, 10),
+    note: STR(b.note, 300),
+  } });
+  res.status(201).json({ ok: true, id: entry.id });
+});
+app.get("/api/admin/waitlist", requireAdmin, async (req, res) => {
+  const status = STR(req.query.status, 20).toUpperCase();
+  res.json(await prisma.waitlistEntry.findMany({ where: status && status !== "ALL" ? { status } : {}, orderBy: { id: "desc" }, take: 300 }));
+});
+app.patch("/api/admin/waitlist/:id", requireAdmin, async (req, res) => {
+  const status = STR(req.body?.status, 20).toUpperCase();
+  if (!["WAITING", "CONTACTED", "BOOKED", "CANCELLED"].includes(status)) return res.status(400).json({ error: "Invalid status." });
+  res.json(await prisma.waitlistEntry.update({ where: { id: Number(req.params.id) }, data: { status } }));
+});
+app.delete("/api/admin/waitlist/:id", requireAdmin, async (req, res) => { await prisma.waitlistEntry.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
 
 // ---- Loyalty & memberships ----
 app.get("/api/loyalty/config", async (_req, res) => { const l = await getSetting("loyalty", LOYALTY_DEFAULT); res.json({ enabled: l.enabled, pointsPerDollar: l.pointsPerDollar, tiers: l.tiers, rewards: l.rewards }); });

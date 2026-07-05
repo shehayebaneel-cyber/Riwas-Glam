@@ -5,7 +5,7 @@ type Dash = {
   today: { bookings: number; revenue: number; profit: number };
   month: { revenue: number; profit: number };
   workingToday: { name: string; role: string }[];
-  commissionOwed: number; pendingReviews: number;
+  commissionOwed: number; pendingReviews: number; waitlist: number;
   lowStock: { count: number; items: { name: string; quantity: number; unit: string }[] };
   giftCards: { count: number; value: number };
   bestServices: { name: string; value: number }[];
@@ -59,6 +59,15 @@ export function DashboardHome({ adminKey, go }: { adminKey: string; go: (tab: st
           {d.lowStock.items.length > 0 && <p className="truncate text-xs text-muted">{d.lowStock.items.map((i) => i.name).join(", ")}</p>}
         </button>
       </div>
+
+      <button onClick={() => go("waitlist")} className="card flex w-full items-center gap-3 p-4 text-left transition hover:border-brand">
+        <span className="text-2xl">⏳</span>
+        <div>
+          <p className="text-xs text-muted">Waiting list</p>
+          <p className={`font-display text-xl font-extrabold ${d.waitlist ? "text-brand" : "text-ink"}`}>{d.waitlist} waiting</p>
+        </div>
+        {d.waitlist > 0 && <span className="ml-auto text-xs text-brand">Contact them when a slot frees up →</span>}
+      </button>
 
       {/* Revenue by day */}
       {d.charts.revenueByDay.length > 0 && (

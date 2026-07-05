@@ -200,6 +200,24 @@ model Expense {
   @@index([date])
 }
 
+// A customer waiting for a spot when their preferred time is full.
+model WaitlistEntry {
+  id            Int      @id @default(autoincrement())
+  customerId    Int?
+  name          String
+  phone         String
+  serviceId     Int?
+  serviceName   String   @default("")
+  staffId       Int?
+  staffName     String   @default("")
+  preferredDate String   @default("")
+  preferredTime String   @default("")
+  note          String   @default("")
+  status        String   @default("WAITING") // WAITING | CONTACTED | BOOKED | CANCELLED
+  createdAt     DateTime @default(now())
+  @@index([status])
+}
+
 model AddOn {
   id          Int      @id @default(autoincrement())
   categoryId  Int

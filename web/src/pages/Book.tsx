@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
+import { WaitlistForm } from "../components/WaitlistForm";
 import type { Category, Staff } from "../types";
 
 const ymd = (d: Date) => d.toLocaleDateString("en-CA");
@@ -30,6 +31,7 @@ export function Book() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState<{ date: string; time: string; staffName: string } | null>(null);
+  const [waitOpen, setWaitOpen] = useState(false);
 
   useEffect(() => {
     api.get<Category[]>("/api/catalog").then((c) => {
@@ -236,7 +238,7 @@ export function Book() {
               {date && (
                 <div className="mt-5">
                   {slots === null ? <p className="text-sm text-muted">Loading times…</p>
-                    : slots.length === 0 ? <p className="rounded-xl bg-surface p-4 text-center text-sm text-muted">No open times on {prettyDate(date)}. Try another day.</p>
+                    : slots.length === 0 ? <div className="rounded-xl bg-surface p-4 text-center text-sm text-muted">No open times on {prettyDate(date)}.<br />Try another day, or <button onClick={() => setWaitOpen(true)} className="font-semibold text-brand hover:underline">join the waiting list →</button></div>
                     : <div className="flex flex-wrap gap-2">{slots.map((t) => <button key={t} onClick={() => { setTime(t); setStep(4); }} className={`chip ${time === t ? "chip-active" : ""}`}>{t}</button>)}</div>}
                 </div>
               )}
@@ -262,6 +264,7 @@ export function Book() {
           )}
         </div>
       </div>
+      {waitOpen && <WaitlistForm context={{ serviceId: service?.id, serviceName: service?.name, staffId, staffName: staff.find((s) => s.id === staffId)?.name, date }} onClose={() => setWaitOpen(false)} />}
     </div>
   );
 }
