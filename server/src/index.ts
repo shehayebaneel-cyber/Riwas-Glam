@@ -526,6 +526,63 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
   });
 });
 
+// ---- Admin home dashboard (all widgets + charts in one call) ----
+app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
+  const now = new Date(); const pad = (n: number) => String(n).padStart(2, "0");
+  const y = now.getUTCFullYear(), mo = now.getUTCMonth();
+  const todayStr = `${y}-${pad(mo + 1)}-${pad(now.getUTCDate())}`;
+  const monthStart = `${y}-${pad(mo + 1)}-01`;
+  const monthEnd = `${y}-${pad(mo + 1)}-${pad(new Date(Date.UTC(y, mo + 1, 0)).getUTCDate())}`;
+  const months: string[] = []; for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, mo - i, 1)); months.push(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`); }
+  const sixStart = months[0] + "-01";
+
+  const [apptsMonth, expMonth, appts6, exp6, staff, products, giftCards, pendingReviews] = await Promise.all([
+    prisma.appointment.findMany({ where: { date: { gte: monthStart, lte: monthEnd }, status: { in: ["CONFIRMED", "COMPLETED"] } }, include: { service: { select: { materialCost: true, category: { select: { name: true } } } } } }),
+    prisma.expense.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.appointment.findMany({ where: { date: { gte: sixStart, lte: monthEnd }, status: { in: ["CONFIRMED", "COMPLETED"] } }, include: { service: { select: { materialCost: true } } } }),
+    prisma.expense.findMany({ where: { date: { gte: sixStart, lte: monthEnd } } }),
+    prisma.staff.findMany({ where: { isActive: true } }),
+    prisma.product.findMany({ where: { isActive: true } }),
+    prisma.giftCard.findMany({ where: { createdAt: { gte: new Date(monthStart + "T00:00:00Z") } } }),
+    prisma.review.count({ where: { status: "PENDING" } }),
+  ]);
+
+  type A = { price: number; commissionAmount: number; service: { materialCost: number } | null };
+  const calc = (arr: A[]) => arr.reduce((o, a) => { o.rev += a.price; o.mat += a.service?.materialCost ?? 0; o.com += a.commissionAmount; return o; }, { rev: 0, mat: 0, com: 0 });
+  const profit = (arr: A[], exp: { amount: number }[]) => round2(calc(arr).rev - calc(arr).mat - calc(arr).com - exp.reduce((s, e) => s + e.amount, 0));
+
+  const apptsToday = apptsMonth.filter((a) => a.date === todayStr);
+  const expToday = expMonth.filter((e) => e.date === todayStr);
+  const tC = calc(apptsToday), mC = calc(apptsMonth);
+
+  const dow = new Date(todayStr + "T00:00:00Z").getUTCDay();
+  const workingToday = staff.filter((s) => { const d = parseArr(s.schedule)[dow]; return d && !d.off && !parseArr(s.blockedDates).includes(todayStr); }).map((s) => ({ name: s.name, role: s.role }));
+  const low = products.filter((p) => p.quantity <= p.minQuantity);
+
+  const svc: Record<string, number> = {}, stf: Record<string, number> = {}, cat: Record<string, number> = {}, day: Record<string, number> = {};
+  for (const a of apptsMonth) {
+    svc[a.serviceName] = (svc[a.serviceName] ?? 0) + 1;
+    stf[a.staffName || "Unassigned"] = (stf[a.staffName || "Unassigned"] ?? 0) + 1;
+    cat[a.service?.category?.name ?? "Other"] = (cat[a.service?.category?.name ?? "Other"] ?? 0) + a.price;
+    day[a.date] = (day[a.date] ?? 0) + a.price;
+  }
+  const top = (m: Record<string, number>, n = 5) => Object.entries(m).map(([name, value]) => ({ name, value: round2(value) })).sort((a, b) => b.value - a.value).slice(0, n);
+
+  res.json({
+    today: { bookings: apptsToday.length, revenue: round2(tC.rev), profit: round2(tC.rev - tC.mat - tC.com - expToday.reduce((s, e) => s + e.amount, 0)) },
+    month: { revenue: round2(mC.rev), profit: round2(mC.rev - mC.mat - mC.com - expMonth.reduce((s, e) => s + e.amount, 0)) },
+    workingToday, commissionOwed: round2(mC.com), pendingReviews,
+    lowStock: { count: low.length, items: low.slice(0, 6).map((p) => ({ name: p.name, quantity: p.quantity, unit: p.unit })) },
+    giftCards: { count: giftCards.length, value: round2(giftCards.reduce((s, c) => s + c.initialValue, 0)) },
+    bestServices: top(svc), mostBookedStaff: top(stf),
+    charts: {
+      revenueByDay: Object.entries(day).map(([date, value]) => ({ date, value: round2(value) })).sort((a, b) => (a.date < b.date ? -1 : 1)),
+      revenueByCategory: top(cat, 8), bookingsByStaff: top(stf, 8),
+      profitByMonth: months.map((m) => ({ name: m, value: profit(appts6.filter((x) => x.date.slice(0, 7) === m), exp6.filter((x) => x.date.slice(0, 7) === m)) })),
+    },
+  });
+});
+
 // ---- Academy / courses ----
 const courseOut = (c: { includes: string }) => ({ ...c, includes: parseArr(c.includes) });
 app.get("/api/courses", async (_req, res) => {

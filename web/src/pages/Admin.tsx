@@ -13,6 +13,7 @@ import { FinancesAdmin } from "../components/FinancesAdmin";
 import { InventoryAdmin } from "../components/InventoryAdmin";
 import { PayoutsAdmin } from "../components/PayoutsAdmin";
 import { AcademyAdmin } from "../components/AcademyAdmin";
+import { DashboardHome } from "../components/DashboardHome";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -31,7 +32,7 @@ export function Admin() {
   const [err, setErr] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [items, setItems] = useState<Appointment[]>([]);
-  const [tab, setTab] = useState<"bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy">("bookings");
+  const [tab, setTab] = useState<"home" | "bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy">("home");
 
   useEffect(() => {
     if (!key) { setChecking(false); return; }
@@ -81,11 +82,12 @@ export function Admin() {
       </div>
 
       <div className="no-scrollbar mt-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
-        {([["bookings", "Bookings"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
+        {([["home", "🏠 Home"], ["bookings", "Bookings"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{label}</button>
         ))}
       </div>
 
+      {tab === "home" && <div className="mt-5"><DashboardHome adminKey={key} go={setTab as (t: string) => void} /></div>}
       {tab === "services" && <div className="mt-5"><CatalogAdmin adminKey={key} /></div>}
       {tab === "calendar" && <div className="mt-5"><CalendarAdmin adminKey={key} /></div>}
       {tab === "staff" && <div className="mt-5"><StaffAdmin adminKey={key} /></div>}
