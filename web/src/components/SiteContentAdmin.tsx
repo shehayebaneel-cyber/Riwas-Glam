@@ -4,7 +4,7 @@ import { ImageUpload } from "./ImageUpload";
 import type { Category } from "../types";
 
 type Content = {
-  name: string; tagline: string; heroTitle: string; heroSub: string; heroImage: string;
+  name: string; logo: string; tagline: string; heroTitle: string; heroSub: string; heroImage: string;
   phone: string; whatsapp: string; email: string; address: string; instagram: string; mapUrl: string;
   aboutTitle: string; about: string;
   why: { icon: string; title: string; text: string }[];
@@ -55,6 +55,9 @@ export function SiteContentAdmin({ adminKey }: { adminKey: string }) {
 
       <Section title="Brand & Hero" desc="The top of your homepage — the first thing visitors see.">
         <Field label="Salon name"><input className="input" value={c.name} onChange={(e) => set({ name: e.target.value })} /></Field>
+        <Field label="Logo (shown in the header)" hint="A logo with a transparent background (PNG) looks crispest. Leave empty to show the salon name as text.">
+          <ImageUpload value={c.logo} onChange={(url) => set({ logo: url })} adminKey={adminKey} />
+        </Field>
         <Field label="Tagline (small text under the name)"><input className="input" value={c.tagline} onChange={(e) => set({ tagline: e.target.value })} /></Field>
         <Field label="Hero headline" hint="Put the part you want in pink/italic on a new line.">
           <textarea rows={2} className="input" value={c.heroTitle} onChange={(e) => set({ heroTitle: e.target.value })} />

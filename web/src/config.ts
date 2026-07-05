@@ -2,6 +2,7 @@
 // site for any salon. (Operating hours for booking live in server/src/config.ts.)
 export const SITE = {
   name: "Riwa's Glam",
+  logo: "", // header logo image (uploaded via admin → Website); falls back to the name text
   tagline: "Hair · Nails · Beauty",
   heroTitle: "Look your best,\nfeel your best.",
   heroSub: "Premium hair, nails and beauty in a calm, welcoming space. Book your appointment online in under a minute.",

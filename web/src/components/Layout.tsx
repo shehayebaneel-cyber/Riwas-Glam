@@ -8,7 +8,9 @@ function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center px-4 py-3">
-        <Link to="/" className="font-display text-xl font-extrabold text-ink">{SITE.name}</Link>
+        <Link to="/" className="flex items-center">
+          {SITE.logo ? <img src={SITE.logo} alt={SITE.name} className="h-10 w-auto sm:h-12" /> : <span className="font-display text-xl font-extrabold text-ink">{SITE.name}</span>}
+        </Link>
         <nav className="ml-auto hidden items-center gap-7 text-sm font-semibold text-muted md:flex">
           <Link to="/services" className="hover:text-ink">Services</Link>
           <Link to="/gallery" className="hover:text-ink">Gallery</Link>

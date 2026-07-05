@@ -358,6 +358,7 @@ app.patch("/api/admin/settings/giftcard", requireAdmin, async (req, res) => {
 // Defaults mirror the salon's launch content; admin edits are stored as overrides.
 const SITE_CONTENT_DEFAULT = {
   name: "Riwa's Glam",
+  logo: "", // header logo image; falls back to the name text when empty
   tagline: "Hair · Nails · Beauty",
   heroTitle: "Look your best,\nfeel your best.",
   heroSub: "Premium hair, nails and beauty in a calm, welcoming space. Book your appointment online in under a minute.",
@@ -418,6 +419,7 @@ app.patch("/api/admin/site-content", requireAdmin, async (req, res) => {
   const arrStr = (v: unknown) => (Array.isArray(v) ? v.map((x) => STR(x, 600)).filter(Boolean) : undefined);
   const next = {
     name: b.name !== undefined ? STR(b.name, 80) : cur.name,
+    logo: b.logo !== undefined ? STR(b.logo, 600) : cur.logo,
     tagline: b.tagline !== undefined ? STR(b.tagline, 120) : cur.tagline,
     heroTitle: b.heroTitle !== undefined ? STR(b.heroTitle, 140) : cur.heroTitle,
     heroSub: b.heroSub !== undefined ? STR(b.heroSub, 400) : cur.heroSub,
