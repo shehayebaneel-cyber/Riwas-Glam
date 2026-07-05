@@ -13,6 +13,7 @@ function Nav() {
         </Link>
         <nav className="ml-auto hidden items-center gap-7 text-sm font-semibold text-muted md:flex">
           <Link to="/services" className="hover:text-ink">Services</Link>
+          <Link to="/packages" className="hover:text-ink">Packages</Link>
           <Link to="/gallery" className="hover:text-ink">Gallery</Link>
           <Link to="/academy" className="hover:text-ink">Academy</Link>
           <a href="/#about" className="hover:text-ink">About</a>

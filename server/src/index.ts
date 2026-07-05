@@ -68,6 +68,14 @@ async function resolveBooking(serviceId: number, addOnIds: number[]) {
   const eligible = rows.map((s) => ({ id: s.id, name: s.name, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates) as string[] }));
   return { service, addOns, durationMin, price, eligible };
 }
+// A package books like a service, but any active specialist can perform it.
+async function resolvePackage(id: number) {
+  const pkg = await prisma.package.findFirst({ where: { id, isActive: true } });
+  if (!pkg) return null;
+  const rows = await prisma.staff.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  const eligible = rows.map((s) => ({ id: s.id, name: s.name, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates) as string[] }));
+  return { pkg, eligible, durationMin: pkg.durationMin, price: round2(pkg.price) };
+}
 
 app.get("/api/availability", async (req, res) => {
   const q = req.query as Record<string, string>;
@@ -75,8 +83,9 @@ app.get("/api/availability", async (req, res) => {
   const staffId = q.staffId ? Number(q.staffId) : null;
   const addOnIds = STR(q.addOns).split(",").map(Number).filter((n) => n > 0);
   if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
-  const r = await resolveBooking(Number(q.serviceId), addOnIds);
-  if (!r) return res.status(404).json({ error: "Service not found." });
+  const pkgId = q.packageId ? Number(q.packageId) : 0;
+  const r = pkgId ? await resolvePackage(pkgId) : await resolveBooking(Number(q.serviceId), addOnIds);
+  if (!r) return res.status(404).json({ error: "Not found." });
   const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
   const slots = availableSlots({ date, durationMin: r.durationMin, staffId, staff: r.eligible, existing, now: new Date(), stepMin: SALON.slotStepMin, leadMin: SALON.leadMin });
   res.json({ date, durationMin: r.durationMin, price: r.price, slots });
@@ -90,9 +99,12 @@ app.post("/api/appointments", async (req, res) => {
   const addOnIds = Array.isArray(b.addOnIds) ? b.addOnIds.map(Number).filter((n: number) => n > 0) : [];
   if (!name || !phone) return res.status(400).json({ error: "Your name and phone are required." });
   if (!isDate(date) || !isTime(time)) return res.status(400).json({ error: "Please pick a valid date and time." });
-  const r = await resolveBooking(Number(b.serviceId), addOnIds);
-  if (!r) return res.status(404).json({ error: "That service isn't available." });
-  if (staffId != null && !r.eligible.some((s) => s.id === staffId)) return res.status(400).json({ error: "That specialist doesn't offer this service." });
+  const isPkg = !!b.packageId;
+  const pr = isPkg ? await resolvePackage(Number(b.packageId)) : null;
+  const sr = isPkg ? null : await resolveBooking(Number(b.serviceId), addOnIds);
+  const r = pr ?? sr;
+  if (!r) return res.status(404).json({ error: "That isn't available." });
+  if (staffId != null && !r.eligible.some((s) => s.id === staffId)) return res.status(400).json({ error: "That specialist isn't available for this." });
   const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
   const slots = availableSlots({ date, durationMin: r.durationMin, staffId, staff: r.eligible, existing, now: new Date(), stepMin: SALON.slotStepMin, leadMin: SALON.leadMin });
   if (!slots.includes(time)) return res.status(409).json({ error: "Sorry, that time was just taken — please pick another." });
@@ -101,9 +113,10 @@ app.post("/api/appointments", async (req, res) => {
   const commissionPct = chosen?.commissionPct ?? 0;
   const appointment = await prisma.appointment.create({
     data: {
-      serviceId: r.service.id, staffId, customerId: optionalCustomerId(req), customerName: name, customerPhone: phone, customerEmail: STR(b.customerEmail, 120),
-      date, time, durationMin: r.durationMin, serviceName: r.service.name, staffName: chosen?.name ?? "",
-      addOns: JSON.stringify(r.addOns.map((a) => ({ name: a.name, price: a.price }))),
+      serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
+      staffId, customerId: optionalCustomerId(req), customerName: name, customerPhone: phone, customerEmail: STR(b.customerEmail, 120),
+      date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
+      addOns: JSON.stringify(pr ? [] : sr!.addOns.map((a) => ({ name: a.name, price: a.price }))),
       price: r.price, commissionPct, commissionAmount: round2(r.price * commissionPct / 100),
       note: STR(b.note, 500), status: "CONFIRMED",
     },
@@ -616,6 +629,40 @@ app.patch("/api/admin/courses/:id", requireAdmin, async (req, res) => {
   res.json(courseOut(await prisma.course.update({ where: { id: Number(req.params.id) }, data })));
 });
 app.delete("/api/admin/courses/:id", requireAdmin, async (req, res) => { await prisma.course.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
+// ---- Packages ----
+async function packagesWithNames(pkgs: { serviceIds: string }[]) {
+  const svc = await prisma.service.findMany({ select: { id: true, name: true } });
+  const map = new Map(svc.map((s) => [s.id, s.name]));
+  return pkgs.map((p) => { const ids = parseArr(p.serviceIds) as number[]; return { ...p, serviceIds: ids, services: ids.map((id) => map.get(id)).filter(Boolean) }; });
+}
+app.get("/api/packages", async (_req, res) => res.json(await packagesWithNames(await prisma.package.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }))));
+app.get("/api/admin/packages", requireAdmin, async (_req, res) => res.json(await packagesWithNames(await prisma.package.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }))));
+app.post("/api/admin/packages", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const title = STR(b.title, 120);
+  if (!title) return res.status(400).json({ error: "Package title is required." });
+  const max = await prisma.package.aggregate({ _max: { sortOrder: true } });
+  const p = await prisma.package.create({ data: {
+    title, image: STR(b.image, 600), description: STR(b.description, 2000),
+    price: Math.max(0, NUM(b.price, 0)), durationMin: Math.max(5, NUM(b.durationMin, 60)),
+    serviceIds: JSON.stringify(Array.isArray(b.serviceIds) ? b.serviceIds.map(Number).filter((n: number) => n > 0) : []),
+    sortOrder: (max._max.sortOrder ?? 0) + 1,
+  } });
+  res.json((await packagesWithNames([p]))[0]);
+});
+app.patch("/api/admin/packages/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.title !== undefined) data.title = STR(b.title, 120);
+  if (b.image !== undefined) data.image = STR(b.image, 600);
+  if (b.description !== undefined) data.description = STR(b.description, 2000);
+  if (b.price !== undefined) data.price = Math.max(0, NUM(b.price, 0));
+  if (b.durationMin !== undefined) data.durationMin = Math.max(5, NUM(b.durationMin, 60));
+  if (b.serviceIds !== undefined) data.serviceIds = JSON.stringify(Array.isArray(b.serviceIds) ? b.serviceIds.map(Number).filter((n: number) => n > 0) : []);
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  const p = await prisma.package.update({ where: { id: Number(req.params.id) }, data });
+  res.json((await packagesWithNames([p]))[0]);
+});
+app.delete("/api/admin/packages/:id", requireAdmin, async (req, res) => { await prisma.package.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
 
 // ---- Inventory ----
 // Recompute a service's material cost from its recipe (sum of qty × product cost).

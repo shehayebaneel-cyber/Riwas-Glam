@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useSearchParams } from "react-router-dom";
 import { api } from "./lib/api";
 import { Home } from "./pages/Home";
 import { Book } from "./pages/Book";
+import { BookPackage } from "./pages/BookPackage";
+import { Packages } from "./pages/Packages";
 import { Admin } from "./pages/Admin";
 import { StaffPortal } from "./pages/StaffPortal";
 import { Account } from "./pages/Account";
@@ -11,6 +13,13 @@ import { Services } from "./pages/Services";
 import { Gallery } from "./pages/Gallery";
 import { Academy } from "./pages/Academy";
 import { SITE } from "./config";
+
+// /book delegates to the package flow when ?package= is present, else the service flow.
+function BookRoute() {
+  const [params] = useSearchParams();
+  const pkg = params.get("package");
+  return pkg ? <BookPackage packageId={Number(pkg)} /> : <Book />;
+}
 
 export default function App() {
   // Hydrate the site's editable content (text + photos) from the backend, then
@@ -30,7 +39,8 @@ export default function App() {
         <Route path="/services" element={<Services />} />
         <Route path="/gallery" element={<Gallery />} />
         <Route path="/academy" element={<Academy />} />
-        <Route path="/book" element={<Book />} />
+        <Route path="/packages" element={<Packages />} />
+        <Route path="/book" element={<BookRoute />} />
         <Route path="/gift-cards" element={<GiftCards />} />
         <Route path="/account" element={<Account />} />
         <Route path="/admin" element={<Admin />} />

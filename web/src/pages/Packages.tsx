@@ -1,0 +1,51 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Layout } from "../components/Layout";
+import { Reveal } from "../components/Reveal";
+import { api, durationLabel, priceLabel } from "../lib/api";
+
+type Pkg = { id: number; title: string; image: string; description: string; price: number; durationMin: number; services: string[] };
+
+export function Packages() {
+  const [items, setItems] = useState<Pkg[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { api.get<Pkg[]>("/api/packages").then(setItems).catch(() => {}).finally(() => setLoading(false)); }, []);
+
+  return (
+    <Layout>
+      <div className="mx-auto max-w-6xl px-4 py-14 text-center">
+        <p className="eyebrow">Save with a bundle</p>
+        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">Packages</h1>
+        <p className="mx-auto mt-3 max-w-lg text-muted">Our favourite services, bundled into one beautiful experience at a special price.</p>
+      </div>
+
+      <div className="mx-auto max-w-6xl px-4 pb-20">
+        {loading && <p className="text-center text-muted">Loading…</p>}
+        {!loading && items.length === 0 && <p className="text-center text-muted">No packages available right now.</p>}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((p, i) => (
+            <Reveal key={p.id} delay={(i % 3) * 80}>
+              <div className="lift flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-border bg-surface">
+                <div className="relative aspect-[4/3] overflow-hidden bg-brand-soft">
+                  {p.image ? <img src={p.image} alt={p.title} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-5xl">🎀</div>}
+                  <span className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 font-display font-bold text-brand shadow">{priceLabel(p.price)}</span>
+                </div>
+                <div className="flex flex-1 flex-col p-5">
+                  <h2 className="font-display text-xl font-bold text-ink">{p.title}</h2>
+                  <p className="mt-1 text-xs text-muted">🕐 {durationLabel(p.durationMin)}</p>
+                  {p.description && <p className="mt-2 text-sm leading-relaxed text-muted">{p.description}</p>}
+                  {p.services.length > 0 && (
+                    <ul className="mt-3 space-y-1.5">
+                      {p.services.map((s) => <li key={s} className="flex items-center gap-2 text-sm text-ink"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-soft text-xs text-brand">✓</span> {s}</li>)}
+                    </ul>
+                  )}
+                  <Link to={`/book?package=${p.id}`} className="btn btn-primary mt-5 w-full py-3">Book this package</Link>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
+}

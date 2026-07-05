@@ -98,6 +98,21 @@ model Course {
   createdAt   DateTime @default(now())
 }
 
+// A bundle of services sold as one (Bridal Package, Glow Package…).
+model Package {
+  id           Int      @id @default(autoincrement())
+  title        String
+  image        String   @default("")
+  description  String   @default("")
+  price        Float    @default(0)
+  durationMin  Int      @default(60)
+  serviceIds   String   @default("[]") // JSON array of included service ids (for display)
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  appointments Appointment[]
+}
+
 // A customer account (self-service booking history, favourites, profile).
 model Customer {
   id           Int      @id @default(autoincrement())
@@ -222,8 +237,10 @@ model Payout {
 
 model Appointment {
   id               Int      @id @default(autoincrement())
-  serviceId        Int
-  service          Service  @relation(fields: [serviceId], references: [id])
+  serviceId        Int?
+  service          Service? @relation(fields: [serviceId], references: [id])
+  packageId        Int?
+  package          Package? @relation(fields: [packageId], references: [id])
   staffId          Int?
   staff            Staff?   @relation(fields: [staffId], references: [id])
   customerId       Int?
