@@ -1,0 +1,28 @@
+name: Deploy backend to Render
+
+# Auto-deploys the Express/Prisma backend to Render whenever backend code is
+# pushed to main. Uses a Render Deploy Hook stored as the RENDER_DEPLOY_HOOK
+# repo secret — no GitHub↔Render account linking needed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "render.yaml"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch: {} # lets you trigger a deploy manually from the Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK secret is not set. Add it in repo Settings → Secrets → Actions."
+            exit 1
+          fi
+          curl -fsS -X POST "$HOOK"
+          echo "✅ Render deploy triggered."
