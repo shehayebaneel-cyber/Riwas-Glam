@@ -84,6 +84,20 @@ model ServiceProduct {
   @@unique([serviceId, productId])
 }
 
+// A training course offered by the academy (lash, makeup…). Managed in admin.
+model Course {
+  id          Int      @id @default(autoincrement())
+  title       String
+  image       String   @default("")
+  description String   @default("")
+  duration    String   @default("") // e.g. "3 days", "1–3 days"
+  price       Float    @default(0)
+  includes    String   @default("[]") // JSON array of strings (what's included)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
 // A customer account (self-service booking history, favourites, profile).
 model Customer {
   id           Int      @id @default(autoincrement())

@@ -526,6 +526,40 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
   });
 });
 
+// ---- Academy / courses ----
+const courseOut = (c: { includes: string }) => ({ ...c, includes: parseArr(c.includes) });
+app.get("/api/courses", async (_req, res) => {
+  const courses = await prisma.course.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  res.json(courses.map(courseOut));
+});
+app.get("/api/admin/courses", requireAdmin, async (_req, res) => {
+  const courses = await prisma.course.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  res.json(courses.map(courseOut));
+});
+app.post("/api/admin/courses", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const title = STR(b.title, 120);
+  if (!title) return res.status(400).json({ error: "Course title is required." });
+  const max = await prisma.course.aggregate({ _max: { sortOrder: true } });
+  const c = await prisma.course.create({ data: {
+    title, image: STR(b.image, 600), description: STR(b.description, 2000), duration: STR(b.duration, 60),
+    price: Math.max(0, NUM(b.price, 0)), includes: JSON.stringify(Array.isArray(b.includes) ? b.includes.map((x: unknown) => STR(x, 120)).filter(Boolean) : []),
+    sortOrder: (max._max.sortOrder ?? 0) + 1,
+  } });
+  res.json(courseOut(c));
+});
+app.patch("/api/admin/courses/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.title !== undefined) data.title = STR(b.title, 120);
+  if (b.image !== undefined) data.image = STR(b.image, 600);
+  if (b.description !== undefined) data.description = STR(b.description, 2000);
+  if (b.duration !== undefined) data.duration = STR(b.duration, 60);
+  if (b.price !== undefined) data.price = Math.max(0, NUM(b.price, 0));
+  if (b.includes !== undefined) data.includes = JSON.stringify(Array.isArray(b.includes) ? b.includes.map((x: unknown) => STR(x, 120)).filter(Boolean) : []);
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  res.json(courseOut(await prisma.course.update({ where: { id: Number(req.params.id) }, data })));
+});
+app.delete("/api/admin/courses/:id", requireAdmin, async (req, res) => { await prisma.course.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
 // ---- Inventory ----
 // Recompute a service's material cost from its recipe (sum of qty × product cost).
 async function recomputeMaterialCost(serviceId: number) {

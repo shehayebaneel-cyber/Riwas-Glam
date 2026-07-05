@@ -9,6 +9,7 @@ import { Account } from "./pages/Account";
 import { GiftCards } from "./pages/GiftCards";
 import { Services } from "./pages/Services";
 import { Gallery } from "./pages/Gallery";
+import { Academy } from "./pages/Academy";
 import { SITE } from "./config";
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/services" element={<Services />} />
         <Route path="/gallery" element={<Gallery />} />
+        <Route path="/academy" element={<Academy />} />
         <Route path="/book" element={<Book />} />
         <Route path="/gift-cards" element={<GiftCards />} />
         <Route path="/account" element={<Account />} />

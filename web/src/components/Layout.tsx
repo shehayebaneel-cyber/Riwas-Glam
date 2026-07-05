@@ -14,6 +14,7 @@ function Nav() {
         <nav className="ml-auto hidden items-center gap-7 text-sm font-semibold text-muted md:flex">
           <Link to="/services" className="hover:text-ink">Services</Link>
           <Link to="/gallery" className="hover:text-ink">Gallery</Link>
+          <Link to="/academy" className="hover:text-ink">Academy</Link>
           <a href="/#about" className="hover:text-ink">About</a>
           <Link to="/gift-cards" className="hover:text-ink">Gift Cards</Link>
           <a href="/#contact" className="hover:text-ink">Contact</a>
