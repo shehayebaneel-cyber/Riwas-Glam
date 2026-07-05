@@ -1,0 +1,14 @@
+{
+  "name": "Riwa's Glam",
+  "short_name": "Riwa's Glam",
+  "description": "Book beauty appointments, gift cards and rewards at Riwa's Glam.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fceef3",
+  "theme_color": "#d97c9a",
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" }
+  ]
+}
