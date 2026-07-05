@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { CatalogAdmin } from "../components/CatalogAdmin";
 import { StaffAdmin } from "../components/StaffAdmin";
 import { CalendarAdmin } from "../components/CalendarAdmin";
-import { ReportsAdmin } from "../components/ReportsAdmin";
+import { ReportsCenter } from "../components/ReportsCenter";
 import { ReviewsAdmin } from "../components/ReviewsAdmin";
 import { GiftCardsAdmin } from "../components/GiftCardsAdmin";
 import { SiteContentAdmin } from "../components/SiteContentAdmin";
@@ -94,7 +94,7 @@ export function Admin() {
       {tab === "payouts" && <div className="mt-5"><PayoutsAdmin adminKey={key} /></div>}
       {tab === "giftcards" && <div className="mt-5"><GiftCardsAdmin adminKey={key} /></div>}
       {tab === "reviews" && <div className="mt-5"><ReviewsAdmin adminKey={key} /></div>}
-      {tab === "reports" && <div className="mt-5"><ReportsAdmin adminKey={key} /></div>}
+      {tab === "reports" && <div className="mt-5"><ReportsCenter adminKey={key} /></div>}
       {tab === "bookings" && (
         <>
           <div className="mt-4 flex items-center justify-end">

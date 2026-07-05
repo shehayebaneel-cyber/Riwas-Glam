@@ -151,8 +151,10 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 app.post("/api/admin/login", (req, res) => { if (STR(req.body?.key) === ADMIN_KEY) return res.json({ ok: true }); res.status(401).json({ error: "Wrong password." }); });
 
 app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
-  const date = STR((req.query as Record<string, string>).date, 10);
-  const items = await prisma.appointment.findMany({ where: date ? { date } : {}, orderBy: [{ date: "asc" }, { time: "asc" }], take: 400 });
+  const q = req.query as Record<string, string>;
+  const date = STR(q.date, 10), from = STR(q.from, 10), to = STR(q.to, 10);
+  const where = date ? { date } : (isDate(from) && isDate(to) ? { date: { gte: from, lte: to } } : {});
+  const items = await prisma.appointment.findMany({ where, orderBy: [{ date: "asc" }, { time: "asc" }], take: 1000 });
   res.json(items.map((a) => ({ ...a, addOns: parseArr(a.addOns) })));
 });
 app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
@@ -638,6 +640,15 @@ app.put("/api/admin/services/:id/recipe", requireAdmin, async (req, res) => {
   }
   const materialCost = await recomputeMaterialCost(serviceId);
   res.json({ ok: true, materialCost });
+});
+
+// Customer list with spend/visit aggregates (for the customers report).
+app.get("/api/admin/customers", requireAdmin, async (_req, res) => {
+  const customers = await prisma.customer.findMany({ orderBy: { createdAt: "desc" }, include: { appointments: { select: { price: true, status: true, date: true } } } });
+  res.json(customers.map((c) => {
+    const done = c.appointments.filter((a) => a.status !== "CANCELLED");
+    return { id: c.id, name: c.name, email: c.email, phone: c.phone, createdAt: c.createdAt, visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)), lastVisit: done.map((a) => a.date).sort().pop() ?? "" };
+  }));
 });
 
 // ---- Staff payouts ----
