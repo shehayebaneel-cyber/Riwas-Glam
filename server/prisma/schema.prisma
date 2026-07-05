@@ -122,11 +122,24 @@ model Customer {
   passwordHash String
   points         Int    @default(0) // spendable loyalty balance
   lifetimePoints Int    @default(0) // total ever earned — drives membership tier
+  birthday     String   @default("") // YYYY-MM-DD (or MM-DD) for birthday rewards
+  notes        String   @default("") // private notes the salon keeps
   createdAt    DateTime @default(now())
   appointments Appointment[]
   favorites    Service[] @relation("CustomerFavorites")
   reviews      Review[]
   redemptions  RewardRedemption[]
+  photos       CustomerPhoto[]
+}
+
+// A before/after (or reference) photo the salon keeps on a customer's profile.
+model CustomerPhoto {
+  id         String   @id @default(cuid())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  url        String
+  label      String   @default("")
+  createdAt  DateTime @default(now())
 }
 
 // A loyalty reward a customer has redeemed with points — shown to staff in-salon.

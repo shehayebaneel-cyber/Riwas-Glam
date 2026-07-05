@@ -298,9 +298,10 @@ function Favourites({ H }: { H: Record<string, string> }) {
 
 function Profile({ H }: { H: Record<string, string> }) {
   const { customer, setCustomer } = useCustomer();
-  const [f, setF] = useState({ name: customer!.name, phone: customer!.phone, email: customer!.email });
+  const [f, setF] = useState({ name: customer!.name, phone: customer!.phone, email: customer!.email, birthday: "" });
   const [pw, setPw] = useState({ current: "", password: "" });
   const [msg, setMsg] = useState("");
+  useEffect(() => { api.get<{ birthday?: string }>("/api/customer/me", H).then((c) => setF((x) => ({ ...x, birthday: c.birthday ?? "" }))).catch(() => {}); /* eslint-disable-next-line */ }, []);
   async function save() { setMsg(""); try { const c = await api.patch<Customer>("/api/customer/me", f, H); setCustomer(c); setMsg("Profile saved."); } catch (e) { setMsg(e instanceof Error ? e.message : "Failed."); } }
   async function changePw() { setMsg(""); try { await api.post("/api/customer/me/password", pw, H); setPw({ current: "", password: "" }); setMsg("Password changed."); } catch (e) { setMsg(e instanceof Error ? e.message : "Failed."); } }
   return (
@@ -310,6 +311,7 @@ function Profile({ H }: { H: Record<string, string> }) {
         <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Name" className="input" />
         <input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="Phone" className="input" />
         <input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="Email" className="input" />
+        <label className="block"><span className="mb-1 block text-xs font-semibold text-muted">Birthday (for a little treat 🎂)</span><input type="date" value={f.birthday} onChange={(e) => setF({ ...f, birthday: e.target.value })} className="input" /></label>
         <button onClick={save} className="btn btn-primary py-2.5">Save</button>
       </div>
       <div className="card space-y-3 p-5">

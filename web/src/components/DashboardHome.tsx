@@ -5,7 +5,7 @@ type Dash = {
   today: { bookings: number; revenue: number; profit: number };
   month: { revenue: number; profit: number };
   workingToday: { name: string; role: string }[];
-  commissionOwed: number; pendingReviews: number; waitlist: number;
+  commissionOwed: number; pendingReviews: number; waitlist: number; birthdays: string[];
   lowStock: { count: number; items: { name: string; quantity: number; unit: string }[] };
   giftCards: { count: number; value: number };
   bestServices: { name: string; value: number }[];
@@ -60,14 +60,23 @@ export function DashboardHome({ adminKey, go }: { adminKey: string; go: (tab: st
         </button>
       </div>
 
-      <button onClick={() => go("waitlist")} className="card flex w-full items-center gap-3 p-4 text-left transition hover:border-brand">
-        <span className="text-2xl">⏳</span>
-        <div>
-          <p className="text-xs text-muted">Waiting list</p>
-          <p className={`font-display text-xl font-extrabold ${d.waitlist ? "text-brand" : "text-ink"}`}>{d.waitlist} waiting</p>
-        </div>
-        {d.waitlist > 0 && <span className="ml-auto text-xs text-brand">Contact them when a slot frees up →</span>}
-      </button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <button onClick={() => go("waitlist")} className="card flex w-full items-center gap-3 p-4 text-left transition hover:border-brand">
+          <span className="text-2xl">⏳</span>
+          <div>
+            <p className="text-xs text-muted">Waiting list</p>
+            <p className={`font-display text-xl font-extrabold ${d.waitlist ? "text-brand" : "text-ink"}`}>{d.waitlist} waiting</p>
+          </div>
+        </button>
+        <button onClick={() => go("customers")} className="card flex w-full items-center gap-3 p-4 text-left transition hover:border-brand">
+          <span className="text-2xl">🎂</span>
+          <div className="min-w-0">
+            <p className="text-xs text-muted">Birthdays this month</p>
+            <p className={`font-display text-xl font-extrabold ${d.birthdays.length ? "text-brand" : "text-ink"}`}>{d.birthdays.length}</p>
+            {d.birthdays.length > 0 && <p className="truncate text-xs text-muted">{d.birthdays.join(", ")}</p>}
+          </div>
+        </button>
+      </div>
 
       {/* Revenue by day */}
       {d.charts.revenueByDay.length > 0 && (

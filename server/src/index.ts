@@ -615,7 +615,7 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
   const months: string[] = []; for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, mo - i, 1)); months.push(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`); }
   const sixStart = months[0] + "-01";
 
-  const [apptsMonth, expMonth, appts6, exp6, staff, products, giftCards, pendingReviews, waitlist] = await Promise.all([
+  const [apptsMonth, expMonth, appts6, exp6, staff, products, giftCards, pendingReviews, waitlist, customersB] = await Promise.all([
     prisma.appointment.findMany({ where: { date: { gte: monthStart, lte: monthEnd }, status: { in: ["CONFIRMED", "COMPLETED"] } }, include: { service: { select: { materialCost: true, category: { select: { name: true } } } } } }),
     prisma.expense.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.appointment.findMany({ where: { date: { gte: sixStart, lte: monthEnd }, status: { in: ["CONFIRMED", "COMPLETED"] } }, include: { service: { select: { materialCost: true } } } }),
@@ -625,7 +625,10 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
     prisma.giftCard.findMany({ where: { createdAt: { gte: new Date(monthStart + "T00:00:00Z") } } }),
     prisma.review.count({ where: { status: "PENDING" } }),
     prisma.waitlistEntry.count({ where: { status: "WAITING" } }),
+    prisma.customer.findMany({ where: { NOT: { birthday: "" } }, select: { name: true, birthday: true } }),
   ]);
+  const bMonth = pad(mo + 1);
+  const bdayThisMonth = customersB.filter((c) => (c.birthday.length > 5 ? c.birthday.slice(5, 7) : c.birthday.slice(0, 2)) === bMonth).map((c) => c.name);
 
   type A = { price: number; commissionAmount: number; service: { materialCost: number } | null };
   const calc = (arr: A[]) => arr.reduce((o, a) => { o.rev += a.price; o.mat += a.service?.materialCost ?? 0; o.com += a.commissionAmount; return o; }, { rev: 0, mat: 0, com: 0 });
@@ -651,7 +654,7 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
   res.json({
     today: { bookings: apptsToday.length, revenue: round2(tC.rev), profit: round2(tC.rev - tC.mat - tC.com - expToday.reduce((s, e) => s + e.amount, 0)) },
     month: { revenue: round2(mC.rev), profit: round2(mC.rev - mC.mat - mC.com - expMonth.reduce((s, e) => s + e.amount, 0)) },
-    workingToday, commissionOwed: round2(mC.com), pendingReviews, waitlist,
+    workingToday, commissionOwed: round2(mC.com), pendingReviews, waitlist, birthdays: bdayThisMonth,
     lowStock: { count: low.length, items: low.slice(0, 6).map((p) => ({ name: p.name, quantity: p.quantity, unit: p.unit })) },
     giftCards: { count: giftCards.length, value: round2(giftCards.reduce((s, c) => s + c.initialValue, 0)) },
     bestServices: top(svc), mostBookedStaff: top(stf),
@@ -931,9 +934,50 @@ app.get("/api/admin/customers", requireAdmin, async (_req, res) => {
   const customers = await prisma.customer.findMany({ orderBy: { createdAt: "desc" }, include: { appointments: { select: { price: true, status: true, date: true } } } });
   res.json(customers.map((c) => {
     const done = c.appointments.filter((a) => a.status !== "CANCELLED");
-    return { id: c.id, name: c.name, email: c.email, phone: c.phone, createdAt: c.createdAt, visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)), lastVisit: done.map((a) => a.date).sort().pop() ?? "" };
+    return { id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday, createdAt: c.createdAt, visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)), lastVisit: done.map((a) => a.date).sort().pop() ?? "" };
   }));
 });
+// Full customer profile for the admin.
+app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const c = await prisma.customer.findUnique({ where: { id }, include: {
+    appointments: { orderBy: [{ date: "desc" }, { time: "desc" }], take: 200 },
+    favorites: { select: { id: true, name: true } },
+    redemptions: { orderBy: { createdAt: "desc" } },
+    photos: { orderBy: { createdAt: "desc" } },
+  } });
+  if (!c) return res.status(404).json({ error: "Not found." });
+  const done = c.appointments.filter((a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW");
+  const staffCount: Record<string, number> = {};
+  for (const a of done) if (a.staffName) staffCount[a.staffName] = (staffCount[a.staffName] ?? 0) + 1;
+  const preferredStaff = Object.entries(staffCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+  const loy = await getSetting("loyalty", LOYALTY_DEFAULT);
+  const giftCards = await prisma.giftCard.findMany({ where: { customerId: id }, orderBy: { createdAt: "desc" } });
+  res.json({
+    id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday, notes: c.notes, createdAt: c.createdAt,
+    points: c.points, lifetimePoints: c.lifetimePoints, tier: tierFor(c.lifetimePoints, loy.tiers)?.name ?? "—",
+    visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)),
+    noShows: c.appointments.filter((a) => a.status === "NO_SHOW").length,
+    cancellations: c.appointments.filter((a) => a.status === "CANCELLED").length,
+    preferredStaff, favorites: c.favorites,
+    appointments: c.appointments.map((a) => ({ id: a.id, date: a.date, time: a.time, serviceName: a.serviceName, staffName: a.staffName, price: a.price, status: a.status })),
+    giftCards: giftCards.map((g) => ({ code: g.code, initialValue: g.initialValue, balance: g.balance, status: g.status })),
+    redemptions: c.redemptions, photos: c.photos,
+  });
+});
+app.patch("/api/admin/customers/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.notes !== undefined) data.notes = STR(b.notes, 2000);
+  if (b.birthday !== undefined) data.birthday = /^\d{4}-\d{2}-\d{2}$|^\d{2}-\d{2}$/.test(STR(b.birthday)) ? STR(b.birthday) : "";
+  if (b.phone !== undefined) data.phone = STR(b.phone, 40);
+  await prisma.customer.update({ where: { id: Number(req.params.id) }, data });
+  res.json({ ok: true });
+});
+app.post("/api/admin/customers/:id/photos", requireAdmin, async (req, res) => {
+  const url = STR(req.body?.url, 600); if (!url) return res.status(400).json({ error: "No image." });
+  res.json(await prisma.customerPhoto.create({ data: { customerId: Number(req.params.id), url, label: STR(req.body?.label, 60) } }));
+});
+app.delete("/api/admin/customers/:id/photos/:photoId", requireAdmin, async (req, res) => { await prisma.customerPhoto.delete({ where: { id: String(req.params.photoId) } }).catch(() => {}); res.json({ ok: true }); });
 
 // ---- Staff payouts ----
 // Computed earnings per staff for a period (from COMPLETED appointments' snapshots).
@@ -978,7 +1022,7 @@ function requireCustomer(req: Request, res: Response, next: NextFunction) {
   (req as Request & { customerId?: number }).customerId = id;
   next();
 }
-const custOut = (c: { id: number; name: string; email: string; phone: string }) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone });
+const custOut = (c: { id: number; name: string; email: string; phone: string; birthday?: string }) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday ?? "" });
 
 app.post("/api/customer/register", async (req, res) => {
   const b = req.body ?? {};
@@ -1003,6 +1047,7 @@ app.patch("/api/customer/me", requireCustomer, async (req, res) => {
   const b = req.body ?? {}; const data: Record<string, unknown> = {};
   if (b.name !== undefined) data.name = STR(b.name, 80);
   if (b.phone !== undefined) data.phone = STR(b.phone, 40);
+  if (b.birthday !== undefined) data.birthday = /^\d{4}-\d{2}-\d{2}$/.test(STR(b.birthday)) ? STR(b.birthday) : "";
   if (b.email !== undefined) {
     const email = STR(b.email, 120).toLowerCase();
     const existing = await prisma.customer.findUnique({ where: { email } });
