@@ -120,10 +120,24 @@ model Customer {
   email        String   @unique
   phone        String   @default("")
   passwordHash String
+  points         Int    @default(0) // spendable loyalty balance
+  lifetimePoints Int    @default(0) // total ever earned — drives membership tier
   createdAt    DateTime @default(now())
   appointments Appointment[]
   favorites    Service[] @relation("CustomerFavorites")
   reviews      Review[]
+  redemptions  RewardRedemption[]
+}
+
+// A loyalty reward a customer has redeemed with points — shown to staff in-salon.
+model RewardRedemption {
+  id         String   @id @default(cuid())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  rewardName String
+  cost       Int      @default(0)
+  status     String   @default("ISSUED") // ISSUED | USED
+  createdAt  DateTime @default(now())
 }
 
 // A digital gift card sold on the site (mock payment). Redeemed in-salon by the
@@ -260,6 +274,7 @@ model Appointment {
   note             String   @default("")
   status           String   @default("CONFIRMED") // CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
   stockDeducted    Boolean  @default(false) // inventory already deducted for this visit?
+  pointsAwarded    Boolean  @default(false) // loyalty points already granted for this visit?
   createdAt        DateTime @default(now())
   @@index([date])
 }

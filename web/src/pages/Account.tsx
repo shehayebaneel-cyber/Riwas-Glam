@@ -54,7 +54,7 @@ function AuthPanel() {
 
 function Dashboard() {
   const { customer, authHeader, logout } = useCustomer();
-  const [tab, setTab] = useState<"bookings" | "favourites" | "profile">("bookings");
+  const [tab, setTab] = useState<"bookings" | "rewards" | "favourites" | "profile">("bookings");
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -69,16 +69,93 @@ function Dashboard() {
       </div>
 
       <div className="mt-4 flex gap-1 rounded-full bg-surface-2 p-1">
-        {([["bookings", "Bookings"], ["favourites", "Favourites"], ["profile", "Profile"]] as const).map(([t, l]) => (
+        {([["bookings", "Bookings"], ["rewards", "Rewards"], ["favourites", "Favourites"], ["profile", "Profile"]] as const).map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded-full py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{l}</button>
         ))}
       </div>
 
       <div className="mt-5">
         {tab === "bookings" && <Bookings H={authHeader} />}
+        {tab === "rewards" && <Rewards H={authHeader} />}
         {tab === "favourites" && <Favourites H={authHeader} />}
         {tab === "profile" && <Profile H={authHeader} />}
       </div>
+    </div>
+  );
+}
+
+type Loyalty = { enabled: boolean; points: number; lifetimePoints: number; tier: string; discountPct: number; pointsPerDollar: number; nextTier: { name: string; pointsNeeded: number } | null; rewards: { id: number; name: string; cost: number; description: string; affordable: boolean }[]; redemptions: { id: string; rewardName: string; cost: number; status: string; createdAt: string }[] };
+
+function Rewards({ H }: { H: Record<string, string> }) {
+  const [d, setD] = useState<Loyalty | null>(null);
+  const [msg, setMsg] = useState("");
+  const load = () => api.get<Loyalty>("/api/customer/me/loyalty", H).then(setD).catch(() => {});
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  async function redeem(id: number) {
+    setMsg("");
+    try { await api.post("/api/customer/me/loyalty/redeem", { rewardId: id }, H); setMsg("🎉 Redeemed! Show this at the salon to claim your reward."); load(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : "Couldn't redeem."); }
+  }
+  if (!d) return <p className="text-center text-muted">Loading…</p>;
+  if (!d.enabled) return <div className="card p-6 text-center text-muted">Our rewards program is coming soon 💖</div>;
+  const fill = d.nextTier ? Math.round((d.lifetimePoints / (d.lifetimePoints + d.nextTier.pointsNeeded)) * 100) : 100;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[1.75rem] bg-gradient-to-br from-brand to-brand-dark p-6 text-white shadow-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-white/80">Your tier</p>
+            <p className="font-display text-3xl font-extrabold">{d.tier}</p>
+            {d.discountPct > 0 && <p className="mt-1 text-sm text-white/90">✨ {d.discountPct}% off every service</p>}
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-white/80">Points</p>
+            <p className="font-display text-3xl font-extrabold">{d.points}</p>
+          </div>
+        </div>
+        {d.nextTier && (
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-white/85"><span>{d.tier}</span><span>{d.nextTier.pointsNeeded} pts to {d.nextTier.name}</span></div>
+            <div className="mt-1 h-2 rounded-full bg-white/25"><div className="h-2 rounded-full bg-white" style={{ width: `${fill}%` }} /></div>
+          </div>
+        )}
+        <p className="mt-4 text-xs text-white/75">Earn {d.pointsPerDollar} point{d.pointsPerDollar === 1 ? "" : "s"} per $1 spent on completed visits.</p>
+      </div>
+
+      {msg && <p className="rounded-xl bg-brand-soft px-4 py-2 text-center text-sm font-medium text-brand-dark">{msg}</p>}
+
+      <div>
+        <p className="mb-2 font-display font-bold text-ink">Rewards</p>
+        <div className="space-y-2">
+          {d.rewards.map((r) => (
+            <div key={r.id} className="card flex items-center gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-ink">{r.name}</p>
+                <p className="text-xs text-muted">{r.description}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-display font-bold text-brand">{r.cost} pts</p>
+                <button onClick={() => redeem(r.id)} disabled={!r.affordable} className="btn btn-primary mt-1 px-3 py-1.5 text-xs disabled:opacity-40">{r.affordable ? "Redeem" : "Locked"}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {d.redemptions.length > 0 && (
+        <div>
+          <p className="mb-2 font-display font-bold text-ink">Your redemptions</p>
+          <div className="card divide-y divide-border p-4">
+            {d.redemptions.map((r) => (
+              <div key={r.id} className="flex items-center justify-between py-2 text-sm first:pt-0 last:pb-0">
+                <span className="text-ink">{r.rewardName}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "USED" ? "bg-surface-2 text-muted" : "bg-emerald-500/15 text-emerald-600"}`}>{r.status === "USED" ? "Used" : "Ready"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

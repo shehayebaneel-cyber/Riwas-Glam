@@ -15,6 +15,7 @@ import { PayoutsAdmin } from "../components/PayoutsAdmin";
 import { AcademyAdmin } from "../components/AcademyAdmin";
 import { DashboardHome } from "../components/DashboardHome";
 import { PackagesAdmin } from "../components/PackagesAdmin";
+import { LoyaltyAdmin } from "../components/LoyaltyAdmin";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -33,7 +34,7 @@ export function Admin() {
   const [err, setErr] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [items, setItems] = useState<Appointment[]>([]);
-  const [tab, setTab] = useState<"home" | "bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages">("home");
+  const [tab, setTab] = useState<"home" | "bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty">("home");
 
   useEffect(() => {
     if (!key) { setChecking(false); return; }
@@ -83,7 +84,7 @@ export function Admin() {
       </div>
 
       <div className="no-scrollbar mt-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
-        {([["home", "🏠 Home"], ["bookings", "Bookings"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
+        {([["home", "🏠 Home"], ["bookings", "Bookings"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{label}</button>
         ))}
       </div>
@@ -98,6 +99,7 @@ export function Admin() {
       {tab === "payouts" && <div className="mt-5"><PayoutsAdmin adminKey={key} /></div>}
       {tab === "academy" && <div className="mt-5"><AcademyAdmin adminKey={key} /></div>}
       {tab === "packages" && <div className="mt-5"><PackagesAdmin adminKey={key} /></div>}
+      {tab === "loyalty" && <div className="mt-5"><LoyaltyAdmin adminKey={key} /></div>}
       {tab === "giftcards" && <div className="mt-5"><GiftCardsAdmin adminKey={key} /></div>}
       {tab === "reviews" && <div className="mt-5"><ReviewsAdmin adminKey={key} /></div>}
       {tab === "reports" && <div className="mt-5"><ReportsCenter adminKey={key} /></div>}

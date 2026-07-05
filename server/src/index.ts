@@ -32,6 +32,22 @@ async function getSetting<T>(key: string, def: T): Promise<T> {
 }
 const setSetting = (key: string, value: unknown) => prisma.setting.upsert({ where: { key }, create: { key, value: JSON.stringify(value) }, update: { value: JSON.stringify(value) } });
 const GC_DEFAULT = { amounts: [25, 50, 100], min: 10, max: 500, expiryMonths: 12 };
+type Tier = { name: string; minPoints: number; discountPct: number };
+type Reward = { id: number; name: string; cost: number; description: string };
+const LOYALTY_DEFAULT = {
+  enabled: true,
+  pointsPerDollar: 1,
+  tiers: [
+    { name: "Silver", minPoints: 0, discountPct: 0 },
+    { name: "Gold", minPoints: 500, discountPct: 5 },
+    { name: "VIP", minPoints: 1500, discountPct: 10 },
+  ] as Tier[],
+  rewards: [
+    { id: 1, name: "$10 off your next visit", cost: 200, description: "Redeem 200 points for $10 off any service." },
+    { id: 2, name: "Free brow shaping", cost: 350, description: "A complimentary brow shape on your next visit." },
+  ] as Reward[],
+};
+const tierFor = (lifetimePoints: number, tiers: Tier[]) => [...tiers].sort((a, b) => b.minPoints - a.minPoints).find((t) => lifetimePoints >= t.minPoints) ?? null;
 const GC_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const gcCode = () => { let s = ""; for (let i = 0; i < 12; i++) s += GC_ALPHABET[crypto.randomInt(GC_ALPHABET.length)]; return `GC-${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8, 12)}`; };
 
@@ -111,13 +127,21 @@ app.post("/api/appointments", async (req, res) => {
   if (staffId == null) staffId = pickFreeStaff({ date, time, durationMin: r.durationMin, staff: r.eligible, existing });
   const chosen = r.eligible.find((s) => s.id === staffId);
   const commissionPct = chosen?.commissionPct ?? 0;
+  const custId = optionalCustomerId(req);
+  let price = r.price;
+  if (custId) { // auto-apply the member's loyalty tier discount
+    const loy = await getSetting("loyalty", LOYALTY_DEFAULT);
+    const cust = loy.enabled ? await prisma.customer.findUnique({ where: { id: custId } }) : null;
+    const t = cust ? tierFor(cust.lifetimePoints, loy.tiers) : null;
+    if (t?.discountPct) price = round2(price * (1 - t.discountPct / 100));
+  }
   const appointment = await prisma.appointment.create({
     data: {
       serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
-      staffId, customerId: optionalCustomerId(req), customerName: name, customerPhone: phone, customerEmail: STR(b.customerEmail, 120),
+      staffId, customerId: custId, customerName: name, customerPhone: phone, customerEmail: STR(b.customerEmail, 120),
       date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
       addOns: JSON.stringify(pr ? [] : sr!.addOns.map((a) => ({ name: a.name, price: a.price }))),
-      price: r.price, commissionPct, commissionAmount: round2(r.price * commissionPct / 100),
+      price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
       note: STR(b.note, 500), status: "CONFIRMED",
     },
   });
@@ -664,6 +688,48 @@ app.patch("/api/admin/packages/:id", requireAdmin, async (req, res) => {
 });
 app.delete("/api/admin/packages/:id", requireAdmin, async (req, res) => { await prisma.package.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
 
+// ---- Loyalty & memberships ----
+app.get("/api/loyalty/config", async (_req, res) => { const l = await getSetting("loyalty", LOYALTY_DEFAULT); res.json({ enabled: l.enabled, pointsPerDollar: l.pointsPerDollar, tiers: l.tiers, rewards: l.rewards }); });
+app.get("/api/customer/me/loyalty", requireCustomer, async (req, res) => {
+  const id = custOf(req);
+  const [cust, loy] = await Promise.all([prisma.customer.findUnique({ where: { id } }), getSetting("loyalty", LOYALTY_DEFAULT)]);
+  if (!cust) return res.status(404).json({ error: "Not found." });
+  const tier = tierFor(cust.lifetimePoints, loy.tiers);
+  const next = [...loy.tiers].sort((a, b) => a.minPoints - b.minPoints).find((t) => t.minPoints > cust.lifetimePoints) ?? null;
+  const redemptions = await prisma.rewardRedemption.findMany({ where: { customerId: id }, orderBy: { createdAt: "desc" }, take: 20 });
+  res.json({
+    enabled: loy.enabled, points: cust.points, lifetimePoints: cust.lifetimePoints, pointsPerDollar: loy.pointsPerDollar,
+    tier: tier?.name ?? "—", discountPct: tier?.discountPct ?? 0,
+    nextTier: next ? { name: next.name, pointsNeeded: next.minPoints - cust.lifetimePoints } : null,
+    rewards: loy.rewards.map((r) => ({ ...r, affordable: cust.points >= r.cost })), redemptions,
+  });
+});
+app.post("/api/customer/me/loyalty/redeem", requireCustomer, async (req, res) => {
+  const id = custOf(req); const rewardId = Number(req.body?.rewardId);
+  const loy = await getSetting("loyalty", LOYALTY_DEFAULT);
+  if (!loy.enabled) return res.status(400).json({ error: "Rewards aren't active right now." });
+  const reward = loy.rewards.find((r) => r.id === rewardId);
+  if (!reward) return res.status(404).json({ error: "Reward not found." });
+  const cust = await prisma.customer.findUnique({ where: { id } });
+  if (!cust || cust.points < reward.cost) return res.status(400).json({ error: "You don't have enough points yet." });
+  await prisma.customer.update({ where: { id }, data: { points: { decrement: reward.cost } } });
+  const redemption = await prisma.rewardRedemption.create({ data: { customerId: id, rewardName: reward.name, cost: reward.cost } });
+  res.json({ ok: true, redemption, points: cust.points - reward.cost });
+});
+app.get("/api/admin/settings/loyalty", requireAdmin, async (_req, res) => res.json(await getSetting("loyalty", LOYALTY_DEFAULT)));
+app.patch("/api/admin/settings/loyalty", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const cur = await getSetting("loyalty", LOYALTY_DEFAULT);
+  const next = {
+    enabled: b.enabled !== undefined ? !!b.enabled : cur.enabled,
+    pointsPerDollar: b.pointsPerDollar !== undefined ? Math.max(0, NUM(b.pointsPerDollar, cur.pointsPerDollar)) : cur.pointsPerDollar,
+    tiers: Array.isArray(b.tiers) ? b.tiers.map((t: Record<string, unknown>) => ({ name: STR(t.name, 30), minPoints: Math.max(0, NUM(t.minPoints, 0)), discountPct: Math.max(0, Math.min(100, NUM(t.discountPct, 0))) })).sort((a: Tier, z: Tier) => a.minPoints - z.minPoints) : cur.tiers,
+    rewards: Array.isArray(b.rewards) ? b.rewards.map((r: Record<string, unknown>, i: number) => ({ id: NUM(r.id, i + 1), name: STR(r.name, 80), cost: Math.max(1, NUM(r.cost, 1)), description: STR(r.description, 200) })) : cur.rewards,
+  };
+  await setSetting("loyalty", next); res.json(next);
+});
+app.get("/api/admin/redemptions", requireAdmin, async (_req, res) => res.json(await prisma.rewardRedemption.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { customer: { select: { name: true, phone: true } } } })));
+app.patch("/api/admin/redemptions/:id", requireAdmin, async (req, res) => res.json(await prisma.rewardRedemption.update({ where: { id: String(req.params.id) }, data: { status: STR(req.body?.status, 10).toUpperCase() === "USED" ? "USED" : "ISSUED" } })));
+
 // ---- Inventory ----
 // Recompute a service's material cost from its recipe (sum of qty × product cost).
 async function recomputeMaterialCost(serviceId: number) {
@@ -677,22 +743,35 @@ async function recomputeMaterialCost(serviceId: number) {
 async function setAppointmentStatus(id: number, status: string) {
   const appt = await prisma.appointment.findUnique({ where: { id } });
   if (!appt) return null;
-  const recipe = await prisma.serviceProduct.findMany({ where: { serviceId: appt.serviceId } });
+  const data: Record<string, unknown> = { status };
+  // Inventory: deduct recipe on completion, restore if un-completed.
+  const recipe = appt.serviceId ? await prisma.serviceProduct.findMany({ where: { serviceId: appt.serviceId } }) : [];
   if (status === "COMPLETED" && !appt.stockDeducted && recipe.length) {
     for (const r of recipe) {
       await prisma.product.update({ where: { id: r.productId }, data: { quantity: { decrement: r.quantity } } }).catch(() => {});
       await prisma.stockMovement.create({ data: { productId: r.productId, type: "USE", quantity: -r.quantity, note: `${appt.serviceName} · appt #${appt.id}` } });
     }
-    return prisma.appointment.update({ where: { id }, data: { status, stockDeducted: true } });
-  }
-  if (status !== "COMPLETED" && appt.stockDeducted && recipe.length) {
+    data.stockDeducted = true;
+  } else if (status !== "COMPLETED" && appt.stockDeducted && recipe.length) {
     for (const r of recipe) {
       await prisma.product.update({ where: { id: r.productId }, data: { quantity: { increment: r.quantity } } }).catch(() => {});
       await prisma.stockMovement.create({ data: { productId: r.productId, type: "ADJUST", quantity: r.quantity, note: `Reversed appt #${appt.id}` } });
     }
-    return prisma.appointment.update({ where: { id }, data: { status, stockDeducted: false } });
+    data.stockDeducted = false;
   }
-  return prisma.appointment.update({ where: { id }, data: { status } });
+  // Loyalty: award points on completion, reverse if un-completed.
+  if (appt.customerId) {
+    const loy = await getSetting("loyalty", LOYALTY_DEFAULT);
+    const pts = Math.round(appt.price * (loy.pointsPerDollar || 0));
+    if (loy.enabled && pts > 0 && status === "COMPLETED" && !appt.pointsAwarded) {
+      await prisma.customer.update({ where: { id: appt.customerId }, data: { points: { increment: pts }, lifetimePoints: { increment: pts } } }).catch(() => {});
+      data.pointsAwarded = true;
+    } else if (pts > 0 && status !== "COMPLETED" && appt.pointsAwarded) {
+      await prisma.customer.update({ where: { id: appt.customerId }, data: { points: { decrement: pts }, lifetimePoints: { decrement: pts } } }).catch(() => {});
+      data.pointsAwarded = false;
+    }
+  }
+  return prisma.appointment.update({ where: { id }, data });
 }
 
 app.get("/api/admin/products", requireAdmin, async (_req, res) => res.json(await prisma.product.findMany({ orderBy: [{ name: "asc" }] })));
