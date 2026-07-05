@@ -28,7 +28,9 @@ async function shrinkToDataUrl(file: File): Promise<string> {
   canvas.width = width;
   canvas.height = height;
   canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", 0.82);
+  // Preserve transparency for PNG/WebP (logos, graphics); compress photos as JPEG.
+  const keepAlpha = file.type === "image/png" || file.type === "image/webp";
+  return canvas.toDataURL(keepAlpha ? "image/png" : "image/jpeg", 0.82);
 }
 
 export function ImageUpload({ value, onChange, adminKey, className = "" }: {
