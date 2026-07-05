@@ -10,6 +10,7 @@ import { ReviewsAdmin } from "../components/ReviewsAdmin";
 import { GiftCardsAdmin } from "../components/GiftCardsAdmin";
 import { SiteContentAdmin } from "../components/SiteContentAdmin";
 import { FinancesAdmin } from "../components/FinancesAdmin";
+import { InventoryAdmin } from "../components/InventoryAdmin";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -28,7 +29,7 @@ export function Admin() {
   const [err, setErr] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [items, setItems] = useState<Appointment[]>([]);
-  const [tab, setTab] = useState<"bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances">("bookings");
+  const [tab, setTab] = useState<"bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory">("bookings");
 
   useEffect(() => {
     if (!key) { setChecking(false); return; }
@@ -78,7 +79,7 @@ export function Admin() {
       </div>
 
       <div className="no-scrollbar mt-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
-        {([["bookings", "Bookings"], ["calendar", "Calendar"], ["finances", "Finances"], ["services", "Services"], ["staff", "Team"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
+        {([["bookings", "Bookings"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["services", "Services"], ["staff", "Team"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{label}</button>
         ))}
       </div>
@@ -88,6 +89,7 @@ export function Admin() {
       {tab === "staff" && <div className="mt-5"><StaffAdmin adminKey={key} /></div>}
       {tab === "website" && <div className="mt-5"><SiteContentAdmin adminKey={key} /></div>}
       {tab === "finances" && <div className="mt-5"><FinancesAdmin adminKey={key} /></div>}
+      {tab === "inventory" && <div className="mt-5"><InventoryAdmin adminKey={key} /></div>}
       {tab === "giftcards" && <div className="mt-5"><GiftCardsAdmin adminKey={key} /></div>}
       {tab === "reviews" && <div className="mt-5"><ReviewsAdmin adminKey={key} /></div>}
       {tab === "reports" && <div className="mt-5"><ReportsAdmin adminKey={key} /></div>}

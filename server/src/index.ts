@@ -158,7 +158,9 @@ app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
 app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
   const status = STR(req.body?.status, 20).toUpperCase();
   if (!["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"].includes(status)) return res.status(400).json({ error: "Invalid status." });
-  res.json(await prisma.appointment.update({ where: { id: Number(req.params.id) }, data: { status } }));
+  const updated = await setAppointmentStatus(Number(req.params.id), status);
+  if (!updated) return res.status(404).json({ error: "Not found." });
+  res.json(updated);
 });
 
 // ---- Admin: catalog ----
@@ -306,7 +308,7 @@ app.patch("/api/staff/me/appointments/:id", requireStaff, async (req, res) => {
   if (!["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"].includes(status)) return res.status(400).json({ error: "Invalid status." });
   const appt = await prisma.appointment.findUnique({ where: { id: Number(req.params.id) } });
   if (!appt || appt.staffId !== staffOf(req)) return res.status(404).json({ error: "Not found." });
-  res.json(await prisma.appointment.update({ where: { id: appt.id }, data: { status } }));
+  res.json(await setAppointmentStatus(appt.id, status));
 });
 
 // ---- Admin: reviews (moderation) ----
@@ -520,6 +522,122 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
     bestService: serviceRows[0]?.name ?? "—", topStaff: toArr(byStaff)[0]?.name ?? "—",
     byCategory: toArr(byCat), byStaff: toArr(byStaff), byService: serviceRows, daily: daySeries,
   });
+});
+
+// ---- Inventory ----
+// Recompute a service's material cost from its recipe (sum of qty × product cost).
+async function recomputeMaterialCost(serviceId: number) {
+  const items = await prisma.serviceProduct.findMany({ where: { serviceId }, include: { product: { select: { costPrice: true } } } });
+  const cost = round2(items.reduce((s, i) => s + i.quantity * (i.product?.costPrice ?? 0), 0));
+  await prisma.service.update({ where: { id: serviceId }, data: { materialCost: cost } }).catch(() => {});
+  return cost;
+}
+// Change an appointment's status and keep inventory in sync (deduct on completion,
+// restore if un-completed). Guarded by stockDeducted so it never double-counts.
+async function setAppointmentStatus(id: number, status: string) {
+  const appt = await prisma.appointment.findUnique({ where: { id } });
+  if (!appt) return null;
+  const recipe = await prisma.serviceProduct.findMany({ where: { serviceId: appt.serviceId } });
+  if (status === "COMPLETED" && !appt.stockDeducted && recipe.length) {
+    for (const r of recipe) {
+      await prisma.product.update({ where: { id: r.productId }, data: { quantity: { decrement: r.quantity } } }).catch(() => {});
+      await prisma.stockMovement.create({ data: { productId: r.productId, type: "USE", quantity: -r.quantity, note: `${appt.serviceName} · appt #${appt.id}` } });
+    }
+    return prisma.appointment.update({ where: { id }, data: { status, stockDeducted: true } });
+  }
+  if (status !== "COMPLETED" && appt.stockDeducted && recipe.length) {
+    for (const r of recipe) {
+      await prisma.product.update({ where: { id: r.productId }, data: { quantity: { increment: r.quantity } } }).catch(() => {});
+      await prisma.stockMovement.create({ data: { productId: r.productId, type: "ADJUST", quantity: r.quantity, note: `Reversed appt #${appt.id}` } });
+    }
+    return prisma.appointment.update({ where: { id }, data: { status, stockDeducted: false } });
+  }
+  return prisma.appointment.update({ where: { id }, data: { status } });
+}
+
+app.get("/api/admin/products", requireAdmin, async (_req, res) => res.json(await prisma.product.findMany({ orderBy: [{ name: "asc" }] })));
+app.post("/api/admin/products", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const name = STR(b.name, 120);
+  if (!name) return res.status(400).json({ error: "Product name is required." });
+  const p = await prisma.product.create({ data: {
+    name, brand: STR(b.brand, 80), category: STR(b.category, 60), supplier: STR(b.supplier, 80), barcode: STR(b.barcode, 60),
+    unit: STR(b.unit, 20) || "unit", costPrice: Math.max(0, NUM(b.costPrice, 0)), sellingPrice: Math.max(0, NUM(b.sellingPrice, 0)),
+    quantity: Math.max(0, NUM(b.quantity, 0)), minQuantity: Math.max(0, NUM(b.minQuantity, 0)),
+    expiryDate: isDate(STR(b.expiryDate)) ? STR(b.expiryDate) : "", location: STR(b.location, 80),
+  } });
+  if (p.quantity > 0) await prisma.stockMovement.create({ data: { productId: p.id, type: "RECEIVE", quantity: p.quantity, note: "Initial stock" } });
+  res.json(p);
+});
+app.patch("/api/admin/products/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  for (const f of ["name", "brand", "category", "supplier", "barcode", "unit", "location"]) if (b[f] !== undefined) data[f] = STR(b[f], f === "name" ? 120 : 80);
+  if (b.costPrice !== undefined) data.costPrice = Math.max(0, NUM(b.costPrice, 0));
+  if (b.sellingPrice !== undefined) data.sellingPrice = Math.max(0, NUM(b.sellingPrice, 0));
+  if (b.minQuantity !== undefined) data.minQuantity = Math.max(0, NUM(b.minQuantity, 0));
+  if (b.expiryDate !== undefined) data.expiryDate = isDate(STR(b.expiryDate)) ? STR(b.expiryDate) : "";
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  const p = await prisma.product.update({ where: { id: Number(req.params.id) }, data });
+  if (b.costPrice !== undefined) { // material costs of services using this product need updating
+    const svc = await prisma.serviceProduct.findMany({ where: { productId: p.id }, select: { serviceId: true } });
+    for (const sid of [...new Set(svc.map((x) => x.serviceId))]) await recomputeMaterialCost(sid);
+  }
+  res.json(p);
+});
+app.delete("/api/admin/products/:id", requireAdmin, async (req, res) => { await prisma.product.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
+// Receive (+), use (−), or adjust (set absolute) stock; logs a movement.
+app.post("/api/admin/products/:id/stock", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id); const b = req.body ?? {};
+  const type = STR(b.type, 10).toUpperCase(); const qty = NUM(b.quantity, 0); const note = STR(b.note, 200);
+  const p = await prisma.product.findUnique({ where: { id } }); if (!p) return res.status(404).json({ error: "Not found." });
+  let newQty = p.quantity, delta = 0;
+  if (type === "RECEIVE") { delta = Math.abs(qty); newQty = p.quantity + delta; }
+  else if (type === "USE") { delta = -Math.abs(qty); newQty = Math.max(0, p.quantity - Math.abs(qty)); }
+  else if (type === "ADJUST") { newQty = Math.max(0, qty); delta = round2(newQty - p.quantity); }
+  else return res.status(400).json({ error: "Invalid movement type." });
+  await prisma.product.update({ where: { id }, data: { quantity: newQty } });
+  await prisma.stockMovement.create({ data: { productId: id, type, quantity: delta, note } });
+  res.json(await prisma.product.findUnique({ where: { id } }));
+});
+app.get("/api/admin/movements", requireAdmin, async (req, res) => {
+  const productId = Number(req.query.productId);
+  res.json(await prisma.stockMovement.findMany({ where: productId ? { productId } : {}, orderBy: { id: "desc" }, take: 200, include: { product: { select: { name: true, unit: true } } } }));
+});
+app.get("/api/admin/inventory/summary", requireAdmin, async (_req, res) => {
+  const products = await prisma.product.findMany({ where: { isActive: true } });
+  const start = new Date(); start.setUTCHours(0, 0, 0, 0);
+  const usage = await prisma.stockMovement.aggregate({ _sum: { quantity: true }, where: { type: "USE", createdAt: { gte: start } } });
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const soonDate = new Date(); soonDate.setDate(soonDate.getDate() + 30); const soonStr = soonDate.toISOString().slice(0, 10);
+  const low = products.filter((p) => p.quantity <= p.minQuantity);
+  const expiring = products.filter((p) => p.expiryDate && p.expiryDate >= todayStr && p.expiryDate <= soonStr);
+  res.json({
+    total: products.length,
+    inStock: products.filter((p) => p.quantity > p.minQuantity).length,
+    low: products.filter((p) => p.quantity > 0 && p.quantity <= p.minQuantity).length,
+    out: products.filter((p) => p.quantity <= 0).length,
+    value: round2(products.reduce((s, p) => s + p.quantity * p.costPrice, 0)),
+    todayUsage: Math.abs(usage._sum.quantity ?? 0),
+    expiringSoon: expiring.length,
+    lowItems: low.map((p) => ({ id: p.id, name: p.name, quantity: p.quantity, minQuantity: p.minQuantity, unit: p.unit })),
+    expiringItems: expiring.map((p) => ({ id: p.id, name: p.name, expiryDate: p.expiryDate })),
+  });
+});
+
+// Service recipe (which products a service consumes) — also refreshes material cost.
+app.get("/api/admin/services/:id/recipe", requireAdmin, async (req, res) => {
+  res.json(await prisma.serviceProduct.findMany({ where: { serviceId: Number(req.params.id) }, include: { product: { select: { name: true, unit: true, costPrice: true } } } }));
+});
+app.put("/api/admin/services/:id/recipe", requireAdmin, async (req, res) => {
+  const serviceId = Number(req.params.id);
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  await prisma.serviceProduct.deleteMany({ where: { serviceId } });
+  for (const it of items) {
+    const productId = Number(it?.productId), quantity = Math.max(0, NUM(it?.quantity, 0));
+    if (productId && quantity > 0) await prisma.serviceProduct.create({ data: { serviceId, productId, quantity } }).catch(() => {});
+  }
+  const materialCost = await recomputeMaterialCost(serviceId);
+  res.json({ ok: true, materialCost });
 });
 
 // ---- Customer accounts ----

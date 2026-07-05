@@ -36,6 +36,52 @@ model Service {
   staff       Staff[]  @relation("ServiceStaff") // the specialists who perform this service
   favoritedBy Customer[] @relation("CustomerFavorites")
   appointments Appointment[]
+  products    ServiceProduct[] // the inventory items this service consumes (its "recipe")
+}
+
+// An inventory item the salon stocks (foundation, gel, wax…).
+model Product {
+  id           Int      @id @default(autoincrement())
+  name         String
+  brand        String   @default("")
+  category     String   @default("")
+  supplier     String   @default("")
+  barcode      String   @default("")
+  unit         String   @default("unit") // unit | ml | g | …
+  costPrice    Float    @default(0) // what the salon pays
+  sellingPrice Float    @default(0) // retail price if resold
+  quantity     Float    @default(0) // current stock on hand
+  minQuantity  Float    @default(0) // low-stock threshold
+  expiryDate   String   @default("") // YYYY-MM-DD or ""
+  location     String   @default("")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  movements    StockMovement[]
+  usedBy       ServiceProduct[]
+}
+
+// A stock change (received, used, corrected) — the inventory history log.
+model StockMovement {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      String   // RECEIVE | USE | ADJUST
+  quantity  Float    // signed delta (+ received, − used)
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  @@index([productId])
+}
+
+// Links a service to the products it consumes, and how much of each — the "recipe".
+// Drives auto-deduction on completion and the service's material cost.
+model ServiceProduct {
+  id        Int     @id @default(autoincrement())
+  serviceId Int
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Float   @default(1)
+  @@unique([serviceId, productId])
 }
 
 // A customer account (self-service booking history, favourites, profile).
@@ -163,6 +209,7 @@ model Appointment {
   commissionAmount Float    @default(0) // price * pct (staff earnings)
   note             String   @default("")
   status           String   @default("CONFIRMED") // CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
+  stockDeducted    Boolean  @default(false) // inventory already deducted for this visit?
   createdAt        DateTime @default(now())
   @@index([date])
 }
