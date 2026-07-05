@@ -135,6 +135,11 @@ app.post("/api/appointments", async (req, res) => {
     const t = cust ? tierFor(cust.lifetimePoints, loy.tiers) : null;
     if (t?.discountPct) price = round2(price * (1 - t.discountPct / 100));
   }
+  let promoUsed = "";
+  if (STR(b.promoCode)) {
+    const pr2 = await validatePromo(STR(b.promoCode), price, custId);
+    if (pr2.ok) { price = Math.max(0, round2(price - pr2.discount)); promoUsed = pr2.code; await prisma.promoCode.update({ where: { code: pr2.code }, data: { usedCount: { increment: 1 } } }).catch(() => {}); }
+  }
   const appointment = await prisma.appointment.create({
     data: {
       serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
@@ -142,7 +147,7 @@ app.post("/api/appointments", async (req, res) => {
       date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
       addOns: JSON.stringify(pr ? [] : sr!.addOns.map((a) => ({ name: a.name, price: a.price }))),
       price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
-      note: STR(b.note, 500), status: "CONFIRMED",
+      note: STR(b.note, 500), promoCode: promoUsed, status: "CONFIRMED",
     },
   });
   res.status(201).json({ ok: true, appointment });
@@ -182,7 +187,7 @@ app.get("/api/gift-cards/:code", async (req, res) => {
 // ---- Admin ----
 const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 // Admin sections (permission keys). Owner has all; other roles get a subset.
-const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "website", "giftcards", "reviews", "reports"];
+const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "website", "giftcards", "reviews", "reports"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me")) return ""; // any authenticated principal
@@ -190,6 +195,7 @@ function permForPath(p: string): string {
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
   if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
+  if (p.includes("/promos")) return "marketing";
   if (p.includes("/site-content") || p.includes("/admin/images")) return "website";
   if (p.includes("/staff")) return "team";
   if (p.includes("/gift-cards") || p.includes("/settings/giftcard")) return "giftcards";
@@ -757,6 +763,66 @@ app.patch("/api/admin/waitlist/:id", requireAdmin, async (req, res) => {
   res.json(await prisma.waitlistEntry.update({ where: { id: Number(req.params.id) }, data: { status } }));
 });
 app.delete("/api/admin/waitlist/:id", requireAdmin, async (req, res) => { await prisma.waitlistEntry.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
+// ---- Marketing / promo codes ----
+async function validatePromo(codeRaw: string, price: number, custId: number | null): Promise<{ ok: true; code: string; discount: number; label: string } | { ok: false; error: string }> {
+  const code = STR(codeRaw, 40).toUpperCase();
+  if (!code) return { ok: false, error: "Enter a code." };
+  const pc = await prisma.promoCode.findUnique({ where: { code } });
+  if (!pc || !pc.isActive) return { ok: false, error: "That code isn't valid." };
+  const today = new Date().toISOString().slice(0, 10);
+  if (pc.startsAt && today < pc.startsAt) return { ok: false, error: "This code isn't active yet." };
+  if (pc.expiresAt && today > pc.expiresAt) return { ok: false, error: "This code has expired." };
+  if (pc.maxUses && pc.usedCount >= pc.maxUses) return { ok: false, error: "This code has reached its limit." };
+  if (pc.minSpend && price < pc.minSpend) return { ok: false, error: `Spend at least $${pc.minSpend} to use this code.` };
+  if (pc.firstTimeOnly) {
+    if (!custId) return { ok: false, error: "This code is for a logged-in customer's first visit." };
+    const prior = await prisma.appointment.count({ where: { customerId: custId, status: { not: "CANCELLED" } } });
+    if (prior > 0) return { ok: false, error: "This code is for first-time customers only." };
+  }
+  if (pc.birthdayOnly) {
+    if (!custId) return { ok: false, error: "Log in to use your birthday reward." };
+    const c = await prisma.customer.findUnique({ where: { id: custId } });
+    const mm = new Date().toISOString().slice(5, 7);
+    const bmm = c?.birthday ? (c.birthday.length > 5 ? c.birthday.slice(5, 7) : c.birthday.slice(0, 2)) : "";
+    if (bmm !== mm) return { ok: false, error: "This code is only valid in your birthday month." };
+  }
+  const discount = pc.type === "PERCENT" ? round2(price * pc.value / 100) : Math.min(price, pc.value);
+  return { ok: true, code: pc.code, discount, label: pc.type === "PERCENT" ? `${pc.value}% off` : `$${pc.value} off` };
+}
+app.post("/api/promo/validate", async (req, res) => {
+  const r = await validatePromo(STR(req.body?.code), round2(NUM(req.body?.amount, 0)), optionalCustomerId(req));
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+app.get("/api/admin/promos", requireAdmin, async (_req, res) => res.json(await prisma.promoCode.findMany({ orderBy: { id: "desc" } })));
+app.post("/api/admin/promos", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const code = STR(b.code, 40).toUpperCase();
+  if (!code) return res.status(400).json({ error: "A code is required." });
+  if (await prisma.promoCode.findUnique({ where: { code } })) return res.status(409).json({ error: "That code already exists." });
+  res.json(await prisma.promoCode.create({ data: {
+    code, type: STR(b.type, 10).toUpperCase() === "FIXED" ? "FIXED" : "PERCENT", value: Math.max(0, NUM(b.value, 0)),
+    minSpend: Math.max(0, NUM(b.minSpend, 0)), maxUses: Math.max(0, NUM(b.maxUses, 0)),
+    firstTimeOnly: !!b.firstTimeOnly, birthdayOnly: !!b.birthdayOnly,
+    startsAt: isDate(STR(b.startsAt)) ? STR(b.startsAt) : "", expiresAt: isDate(STR(b.expiresAt)) ? STR(b.expiresAt) : "",
+    description: STR(b.description, 200),
+  } }));
+});
+app.patch("/api/admin/promos/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.type !== undefined) data.type = STR(b.type, 10).toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
+  if (b.value !== undefined) data.value = Math.max(0, NUM(b.value, 0));
+  if (b.minSpend !== undefined) data.minSpend = Math.max(0, NUM(b.minSpend, 0));
+  if (b.maxUses !== undefined) data.maxUses = Math.max(0, NUM(b.maxUses, 0));
+  if (b.firstTimeOnly !== undefined) data.firstTimeOnly = !!b.firstTimeOnly;
+  if (b.birthdayOnly !== undefined) data.birthdayOnly = !!b.birthdayOnly;
+  if (b.startsAt !== undefined) data.startsAt = isDate(STR(b.startsAt)) ? STR(b.startsAt) : "";
+  if (b.expiresAt !== undefined) data.expiresAt = isDate(STR(b.expiresAt)) ? STR(b.expiresAt) : "";
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  if (b.description !== undefined) data.description = STR(b.description, 200);
+  res.json(await prisma.promoCode.update({ where: { id: Number(req.params.id) }, data }));
+});
+app.delete("/api/admin/promos/:id", requireAdmin, async (req, res) => { await prisma.promoCode.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
 
 // ---- Loyalty & memberships ----
 app.get("/api/loyalty/config", async (_req, res) => { const l = await getSetting("loyalty", LOYALTY_DEFAULT); res.json({ enabled: l.enabled, pointsPerDollar: l.pointsPerDollar, tiers: l.tiers, rewards: l.rewards }); });

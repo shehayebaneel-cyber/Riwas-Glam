@@ -170,6 +170,24 @@ model GiftCard {
   createdAt      DateTime @default(now())
 }
 
+// A promotional discount code applied at checkout.
+model PromoCode {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  type          String   @default("PERCENT") // PERCENT | FIXED
+  value         Float    @default(0)
+  minSpend      Float    @default(0)
+  maxUses       Int      @default(0) // 0 = unlimited
+  usedCount     Int      @default(0)
+  firstTimeOnly Boolean  @default(false)
+  birthdayOnly  Boolean  @default(false)
+  startsAt      String   @default("") // YYYY-MM-DD
+  expiresAt     String   @default("")
+  isActive      Boolean  @default(true)
+  description   String   @default("")
+  createdAt     DateTime @default(now())
+}
+
 // Simple key/value settings store the manager controls (gift-card config,
 // site content, etc.).
 model Setting {
@@ -305,6 +323,7 @@ model Appointment {
   commissionPct    Float    @default(0) // snapshot
   commissionAmount Float    @default(0) // price * pct (staff earnings)
   note             String   @default("")
+  promoCode        String   @default("") // discount code applied, if any
   status           String   @default("CONFIRMED") // CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
   stockDeducted    Boolean  @default(false) // inventory already deducted for this visit?
   pointsAwarded    Boolean  @default(false) // loyalty points already granted for this visit?

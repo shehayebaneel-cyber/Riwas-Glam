@@ -4,6 +4,7 @@ import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
 import { WaitlistForm } from "../components/WaitlistForm";
+import { PromoField, type Applied } from "../components/PromoField";
 import type { Staff } from "../types";
 
 type Pkg = { id: number; title: string; image: string; description: string; price: number; durationMin: number; services: string[] };
@@ -28,6 +29,7 @@ export function BookPackage({ packageId }: { packageId: number }) {
   const [err, setErr] = useState("");
   const [done, setDone] = useState<{ date: string; time: string; staffName: string } | null>(null);
   const [waitOpen, setWaitOpen] = useState(false);
+  const [promo, setPromo] = useState<Applied | null>(null);
 
   useEffect(() => {
     api.get<Pkg[]>("/api/packages").then((ps) => setPkg(ps.find((p) => p.id === packageId) ?? null)).catch(() => {});
@@ -51,7 +53,7 @@ export function BookPackage({ packageId }: { packageId: number }) {
     if (!form.customerName.trim() || !form.customerPhone.trim()) { setErr("Please enter your name and phone."); return; }
     setBusy(true); setErr("");
     try {
-      const r = await api.post<{ appointment: { staffName: string } }>("/api/appointments", { packageId, staffId, date, time, ...form }, authHeader);
+      const r = await api.post<{ appointment: { staffName: string } }>("/api/appointments", { packageId, staffId, date, time, promoCode: promo?.code, ...form }, authHeader);
       setDone({ date, time, staffName: r.appointment.staffName });
     } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Couldn't complete the booking."); } finally { setBusy(false); }
   }
@@ -158,6 +160,8 @@ export function BookPackage({ packageId }: { packageId: number }) {
                 <p className="font-display text-lg font-bold text-ink">{pkg.title}</p>
                 <p className="mt-1 text-muted">{prettyDate(date)} at {time} · {durationLabel(pkg.durationMin)} · {priceLabel(pkg.price)}{staffId ? ` · with ${staff.find((s) => s.id === staffId)?.name}` : ""}</p>
               </div>
+              <PromoField amount={pkg.price} authHeader={authHeader} applied={promo} onApply={setPromo} onClear={() => setPromo(null)} />
+              {promo && <p className="text-right text-sm font-semibold text-ink">Total after discount: <span className="text-brand">{priceLabel(Math.max(0, pkg.price - promo.discount))}</span></p>}
               <input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} required placeholder="Your name *" className="input" />
               <input value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} required placeholder="Phone number *" className="input" />
               <input value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} placeholder="Email (optional)" className="input" />
