@@ -1,0 +1,23 @@
+# Render Blueprint for the Riwa's Glam backend API.
+# Frontend is deployed separately on Vercel (web/). Database is Neon Postgres.
+# Secret env vars (DATABASE_URL, DIRECT_URL, ADMIN_KEY) are set in the Render
+# dashboard, not committed here (sync: false).
+services:
+  - type: web
+    name: riwasglam-api
+    runtime: node
+    rootDir: server
+    plan: free
+    region: virginia # same region as the Neon database (us-east-1)
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: ADMIN_KEY
+        sync: false
+      - key: NODE_VERSION
+        value: "22"

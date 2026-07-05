@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases (dev only; production is Neon Postgres)
+*.db
+*.db-journal
+
+# Prisma generated client
+**/.prisma/
+
+# Logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

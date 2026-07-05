@@ -1,0 +1,253 @@
+[
+  {
+    "name": "Makeup",
+    "services": [
+      {
+        "name": "Bridal Makeup",
+        "price": 200,
+        "durationMin": 180,
+        "description": "Transform your look on your special day with our expert bridal makeup service. We focus on enhancing your natural beauty, ensuring you feel radiant and confident as you walk down the aisle. Enjoy a tailored experience designed to match your unique style and vision for your dream wedding."
+      },
+      {
+        "name": "Engagement Makeup",
+        "price": 100,
+        "durationMin": 120,
+        "description": "Enhance your natural beauty for that special moment with our expert engagement makeup service. Our talented artists specialize in creating a polished and radiant look that ensures you feel confident and stunning on your unforgettable day."
+      },
+      {
+        "name": "Full Glam",
+        "price": 60,
+        "durationMin": 120,
+        "description": "Indulge in a stunning transformation that highlights your natural beauty. Our full glam service is designed to elevate your look for any occasion, leaving you feeling confident and radiant. Enjoy expertly applied makeup that enhances your features and creates a flawless finish, perfect for making a lasting impression."
+      },
+      {
+        "name": "Simple Glam",
+        "price": 40,
+        "durationMin": 60,
+        "description": "Transform your look with a chic and polished makeup experience designed to enhance your natural beauty. Our Simple Glam service provides an effortless yet stunning appearance, perfect for any occasion. Enjoy the indulgence of a full glam application tailored to your unique style."
+      },
+      {
+        "name": "False Lashes",
+        "price": 7,
+        "durationMin": 10,
+        "description": "Enhance your natural beauty and make a stunning statement with our false lashes service. Experience fuller, luscious lashes that effortlessly elevate your look for any occasion, leaving you feeling glamorous and confident."
+      }
+    ]
+  },
+  {
+    "name": "Lashes",
+    "services": [
+      {
+        "name": "Refill Volume",
+        "price": 25,
+        "durationMin": 45,
+        "description": "Enhance your natural beauty with our Refill Volume service, designed to refresh and restore your stunning lash extensions. This service revitalizes your look by adding fullness and length, ensuring your lashes remain captivating and vibrant."
+      },
+      {
+        "name": "Refill Classic - From",
+        "price": 20,
+        "durationMin": 40,
+        "description": "Enhance your beauty with our Refill Classic service, perfect for maintaining the stunning fullness of your classic lash extensions. This essential treatment replenishes volume while ensuring your lashes remain beautifully defined and captivating. Experience lasting elegance as we keep your lashes looking their best, ready to impress for any occasion."
+      },
+      {
+        "name": "Volume",
+        "price": 50,
+        "durationMin": 90,
+        "description": "Experience a stunning transformation with beautifully fuller lashes that enhance your natural beauty. Our Volume lash extensions provide a luxurious, fluffy look, giving you that perfect pop while still feeling light and comfortable. Enjoy the bold yet refined elegance that comes with every set."
+      },
+      {
+        "name": "Light Volume",
+        "price": 45,
+        "durationMin": 60,
+        "description": "Experience the beauty of effortlessly enhanced lashes that add just the right amount of volume. This service offers a natural, fluttery look that makes your eyes pop while maintaining a soft, elegant appearance. Perfect for any occasion, you'll love the way you feel with your stunning new lashes."
+      },
+      {
+        "name": "Classic",
+        "price": 40,
+        "durationMin": 90,
+        "description": "Enhance your natural beauty with lush, full lash extensions that add elegance to your look. Our Classic service is designed to provide a timeless appearance that amplifies your eyes, giving you a wonderful boost of confidence you'll love."
+      },
+      {
+        "name": "Lash Lifting",
+        "price": 25,
+        "durationMin": 60,
+        "description": "Elevate your beauty routine with a lash lift that beautifully enhances your natural lashes. This service gently curls and lifts your eyelashes, giving them a fuller, more defined look without the need for extensions or mascara. Experience waking up every day with effortless elegance."
+      },
+      {
+        "name": "Lash Removal",
+        "price": 5,
+        "durationMin": 20,
+        "description": "Revitalize your look with our gentle eyelash removal service. We ensure a safe and comfortable experience, carefully removing extensions while caring for your natural lashes. Enjoy a fresh start and say goodbye to your old lashes with confidence."
+      }
+    ]
+  },
+  {
+    "name": "Nails",
+    "services": [
+      {
+        "name": "Full Set Fiber / Poly",
+        "price": 45,
+        "durationMin": 120,
+        "description": "Indulge in the elegance of a full set of fiber or poly nails, designed to enhance your natural beauty. This service provides a durable and stylish foundation for your nail art, allowing you to express your personality with vibrant colors and intricate designs."
+      },
+      {
+        "name": "Half Tip",
+        "price": 33,
+        "durationMin": 90,
+        "description": "Illuminate your nails with our stunning Half Tip art! This service adds a creative touch, showcasing colors and designs that express your unique style while keeping your nails sleek and stylish. Perfect for any occasion, Half Tip brings out your inner beauty effortlessly."
+      },
+      {
+        "name": "Full Tip",
+        "price": 28,
+        "durationMin": 90,
+        "description": "Transform your nails into a canvas of creativity with our stunning full tip service. Enjoy beautifully shaped nails with a perfect finish that showcases your personal style and flair. Experience a delightful addition to your beauty routine that enhances your manicure beautifully."
+      },
+      {
+        "name": "Pedicure + Rubber + Gel Color",
+        "price": 18,
+        "durationMin": 60,
+        "description": "Indulge your feet with a rejuvenating experience that combines relaxation and style. This gel pedicure features a soothing rubber treatment followed by a stunning gel color of your choice, leaving your feet beautifully polished and ready to shine."
+      },
+      {
+        "name": "Mani + Rubber + Gel Color",
+        "price": 18,
+        "durationMin": 60,
+        "description": "Indulge your nails in a luxurious gel color manicure that brings vibrant, long-lasting color to life. This service promises a flawless finish while pampering your hands, ensuring your nails look stunning and well-groomed for any occasion."
+      },
+      {
+        "name": "Pedicure + Rubber",
+        "price": 15,
+        "durationMin": 60,
+        "description": "Indulge in a refreshing experience that rejuvenates your feet and nails. This pedicure service combines expert care with the soothing benefits of rubber, ensuring your feet feel soft and well-groomed. Treat yourself to a moment of relaxation and leave with beautifully polished toes."
+      },
+      {
+        "name": "Mani + Rubber",
+        "price": 13,
+        "durationMin": 45,
+        "description": "Indulge in a unique manicure experience that combines traditional nail care with the innovative touch of rubber applications. Transform your nails with meticulous shaping and polishing, leaving them looking pristine and perfectly groomed. Delight in the soothing, protective layer that enhances your natural beauty."
+      },
+      {
+        "name": "Pedicure",
+        "price": 12,
+        "durationMin": 45,
+        "description": "Indulge your feet with a rejuvenating experience that will leave you feeling refreshed. Our pedicure service provides meticulous attention to your nails and feet, ensuring they look beautiful and are pampered for ultimate relaxation."
+      },
+      {
+        "name": "Parafen",
+        "price": 8,
+        "durationMin": 20,
+        "description": "Indulge in a luxurious experience that nourishes and rejuvenates your hands. This soothing treatment wraps your nails and skin in warm, moisturizing paraffin, leaving them soft, hydrated, and beautifully pampered. Perfect for an extra touch of care in your manicure routine."
+      },
+      {
+        "name": "Manicure",
+        "price": 8,
+        "durationMin": 30,
+        "description": "Indulge in a delightful experience that will leave your nails looking polished and elegant. A manicure involves shaping, filing, and enhancing your nails to achieve a clean, stunning look that complements your unique style."
+      },
+      {
+        "name": "Full Design",
+        "price": 5,
+        "durationMin": 20,
+        "description": "Unleash your creativity with our stunning nail art designs. Whether you prefer bold statements or delicate patterns, our skilled artists bring your vision to life with precision and flair. Enjoy a unique and personalized experience that transforms your nails into a canvas of art."
+      },
+      {
+        "name": "Gelish Removal",
+        "price": 5,
+        "durationMin": 20,
+        "description": "Revitalize your nails with our expert gel removal service. Designed to gently and efficiently lift away gel polish, this treatment prepares your nails for their next stunning look while ensuring they remain healthy and strong. Experience the ease and care your nails deserve."
+      },
+      {
+        "name": "French / Chrome",
+        "price": 3,
+        "durationMin": 10,
+        "description": "Elevate your nail game with our chic French / Chrome manicure. This stylish service combines the timeless elegance of a French manicure with a dazzling chrome finish, giving your nails a polished and modern look that perfectly complements any outfit."
+      },
+      {
+        "name": "\\+ One Tip",
+        "price": 2,
+        "durationMin": 5,
+        "description": "Elevate your nail game with stunning artistry that reflects your unique style. Our nail art service transforms ordinary nails into vibrant canvases, allowing for creative designs that express your personality. Enjoy a delightful experience as you relax and let our skilled professionals enhance your look."
+      },
+      {
+        "name": "Pose",
+        "price": 5,
+        "durationMin": 15,
+        "description": "Indulge in a creative expression of style with our signature nail art service. Transform your nails into stunning pieces of art that reflect your personality and flair, perfect for any occasion or to simply treat yourself."
+      }
+    ]
+  },
+  {
+    "name": "Aesthetics",
+    "services": [
+      {
+        "name": "Filler",
+        "price": 130,
+        "durationMin": 45,
+        "description": "Enhance your natural beauty with a rejuvenating filler treatment that smooths and plumps. This non-invasive procedure will help restore volume to your face, providing a youthful and refreshed appearance that you'll love. Experience the difference with a professional touch that prioritizes your comfort and confidence."
+      },
+      {
+        "name": "Botox",
+        "price": 100,
+        "durationMin": 30,
+        "description": "Experience a refreshed and youthful appearance with our specialized treatment designed to smooth fine lines and wrinkles. Our professional approach ensures a comfortable atmosphere where you can enhance your natural beauty with care and precision."
+      },
+      {
+        "name": "Skin Booster",
+        "price": 50,
+        "durationMin": 45,
+        "description": "Revitalize your skin with our luxurious treatment designed to enhance your natural glow. This body exfoliation service gently removes dead skin cells, leaving your skin feeling fresh, smooth, and rejuvenated. Ideal for anyone seeking a boost in their skincare routine, it's your perfect escape to glowing beauty."
+      },
+      {
+        "name": "Fat Dissolving",
+        "price": 50,
+        "durationMin": 45,
+        "description": "Experience a refined approach to contouring with our specialized injections designed to help reduce unwanted fat. This innovative service targets problem areas, promoting a more sculpted and toned appearance while enhancing your natural beauty."
+      }
+    ]
+  },
+  {
+    "name": "Brows & Face",
+    "services": [
+      {
+        "name": "Brow Lamination",
+        "price": 25,
+        "durationMin": 45,
+        "description": "Elevate your brow game with a treatment that shapes and trains your brows into the perfect style. Achieve a sleek and polished look that enhances your natural beauty, leaving you with full, fluffy eyebrows that are effortlessly fashionable. Experience the ultimate in brow care today."
+      },
+      {
+        "name": "Moustache",
+        "price": 2,
+        "durationMin": 10,
+        "description": ""
+      },
+      {
+        "name": "Eyebrow Plucking",
+        "price": 5,
+        "durationMin": 15,
+        "description": "Experience the art of precision with expert eyebrow plucking that enhances your natural beauty. Our skilled professionals will shape your brows to perfection, ensuring a polished and defined look that complements your features beautifully."
+      }
+    ]
+  },
+  {
+    "name": "Skincare",
+    "services": [
+      {
+        "name": "Deep Facial",
+        "price": 40,
+        "durationMin": 60,
+        "description": "Experience a refreshing cleanse that leaves your skin feeling rejuvenated and vibrant. This deep facial is designed to remove impurities, unclog pores, and promote a clearer complexion, giving your skin the attention it deserves. Indulge yourself in a luxurious treatment that helps restore balance and radiance."
+      }
+    ]
+  },
+  {
+    "name": "Tattoos",
+    "services": [
+      {
+        "name": "Body Tattoo - From",
+        "price": 50,
+        "durationMin": 60,
+        "description": "Transform your body into a canvas with our stunning tattoo artistry. Our skilled professionals work with you to create unique designs that express your individuality and style, ensuring a personalized experience that celebrates your body as a work of art."
+      }
+    ]
+  }
+]

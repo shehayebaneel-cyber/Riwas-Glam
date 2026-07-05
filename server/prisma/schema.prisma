@@ -1,0 +1,144 @@
+// Riwa's Glam — single-salon booking + management backend.
+// Production: PostgreSQL on Neon. `url` is the pooled connection (app runtime);
+// `directUrl` is the unpooled connection Prisma uses for migrations / db push.
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String
+  emoji     String   @default("")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  services  Service[]
+  addOns    AddOn[]
+}
+
+model Service {
+  id          Int      @id @default(autoincrement())
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String
+  description String   @default("")
+  durationMin Int      @default(30)
+  price       Float    @default(0)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  staff       Staff[]  @relation("ServiceStaff") // the specialists who perform this service
+  favoritedBy Customer[] @relation("CustomerFavorites")
+  appointments Appointment[]
+}
+
+// A customer account (self-service booking history, favourites, profile).
+model Customer {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  phone        String   @default("")
+  passwordHash String
+  createdAt    DateTime @default(now())
+  appointments Appointment[]
+  favorites    Service[] @relation("CustomerFavorites")
+  reviews      Review[]
+}
+
+// A digital gift card sold on the site (mock payment). Redeemed in-salon by the
+// manager against a customer's bill.
+model GiftCard {
+  id             Int      @id @default(autoincrement())
+  code           String   @unique
+  initialValue   Float
+  balance        Float
+  purchaserName  String   @default("")
+  purchaserEmail String   @default("")
+  recipientName  String   @default("")
+  message        String   @default("")
+  status         String   @default("ACTIVE") // ACTIVE | REDEEMED | VOID
+  customerId     Int?
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+}
+
+// Simple key/value settings store the manager controls (gift-card config, etc.).
+model Setting {
+  key   String @id
+  value String @default("")
+}
+
+// A customer review — held for manager moderation, then shown on the site.
+model Review {
+  id            Int      @id @default(autoincrement())
+  customerId    Int?
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  appointmentId Int?     // optional link, to prevent duplicate reviews per visit
+  authorName    String
+  rating        Int      @default(5) // 1-5
+  comment       String   @default("")
+  status        String   @default("PENDING") // PENDING | APPROVED | HIDDEN
+  featured      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model AddOn {
+  id          Int      @id @default(autoincrement())
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String
+  price       Float    @default(0)
+  durationMin Int      @default(0)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+}
+
+model Staff {
+  id            Int      @id @default(autoincrement())
+  name          String
+  role          String   @default("")
+  bio           String   @default("")
+  avatar        String?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  commissionPct Float    @default(0) // % of service price paid to this staff
+  loginEmail    String?  @unique // staff login (set by the manager)
+  passwordHash  String? // bcrypt; null = no login yet
+  // Weekly working schedule: JSON array[7], index 0=Sun..6=Sat,
+  // each { off, open, close, breakStart, breakEnd }.
+  schedule      String   @default("[]")
+  blockedDates  String   @default("[]") // JSON ["YYYY-MM-DD"] — days off / holidays
+  services      Service[] @relation("ServiceStaff")
+  appointments  Appointment[]
+}
+
+model Appointment {
+  id               Int      @id @default(autoincrement())
+  serviceId        Int
+  service          Service  @relation(fields: [serviceId], references: [id])
+  staffId          Int?
+  staff            Staff?   @relation(fields: [staffId], references: [id])
+  customerId       Int?
+  customer         Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName     String
+  customerPhone    String
+  customerEmail    String   @default("")
+  date             String   // YYYY-MM-DD
+  time             String   // HH:MM (start)
+  durationMin      Int      @default(30) // total incl. add-ons
+  serviceName      String   @default("")
+  staffName        String   @default("")
+  addOns           String   @default("[]") // JSON [{ name, price }]
+  price            Float    @default(0) // total incl. add-ons
+  commissionPct    Float    @default(0) // snapshot
+  commissionAmount Float    @default(0) // price * pct (staff earnings)
+  note             String   @default("")
+  status           String   @default("CONFIRMED") // CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
+  createdAt        DateTime @default(now())
+  @@index([date])
+}
