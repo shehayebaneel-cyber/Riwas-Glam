@@ -240,6 +240,8 @@ model Staff {
   commissionPct Float    @default(0) // % of service price paid to this staff
   loginEmail    String?  @unique // staff login (set by the manager)
   passwordHash  String? // bcrypt; null = no login yet
+  accessRole    String   @default("STAFF") // OWNER | MANAGER | RECEPTIONIST | STAFF (admin access level)
+  permissions   String   @default("[]") // JSON array of allowed admin section keys
   // Weekly working schedule: JSON array[7], index 0=Sun..6=Sat,
   // each { off, open, close, breakStart, breakEnd }.
   schedule      String   @default("[]")

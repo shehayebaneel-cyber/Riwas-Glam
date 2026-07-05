@@ -27,34 +27,55 @@ const BADGE: Record<string, string> = {
   NO_SHOW: "bg-amber-400/15 text-amber-600",
 };
 
+type Tab = "home" | "bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist";
+const TABS: [Tab, string][] = [["home", "🏠 Home"], ["bookings", "Bookings"], ["waitlist", "Waitlist"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]];
+const TAB_PERM: Record<Tab, string> = { home: "finances", bookings: "bookings", waitlist: "waitlist", calendar: "calendar", finances: "finances", inventory: "inventory", payouts: "payouts", services: "services", staff: "team", academy: "academy", packages: "packages", loyalty: "loyalty", website: "website", giftcards: "giftcards", reviews: "reviews", reports: "reports" };
+
 export function Admin() {
   const [key, setKey] = useState(() => localStorage.getItem(KEY) ?? "");
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [perms, setPerms] = useState<string[]>([]);
+  const [me, setMe] = useState<{ role: string; name: string }>({ role: "", name: "" });
+  const [mode, setMode] = useState<"owner" | "staff">("owner");
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [items, setItems] = useState<Appointment[]>([]);
-  const [tab, setTab] = useState<"home" | "bookings" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist">("home");
+  const [tab, setTab] = useState<Tab>("home");
+
+  async function applyCred(cred: string): Promise<boolean> {
+    try {
+      const m = await api.get<{ role: string; name: string; permissions: string[] }>("/api/admin/me", { "x-admin-key": cred });
+      if (!m.permissions?.length) { setErr("This account has no admin access — please use the staff portal."); return false; }
+      setKey(cred); localStorage.setItem(KEY, cred); setPerms(m.permissions); setMe({ role: m.role, name: m.name }); setAuthed(true);
+      return true;
+    } catch { return false; }
+  }
 
   useEffect(() => {
     if (!key) { setChecking(false); return; }
-    api.post("/api/admin/login", { key }).then(() => setAuthed(true)).catch(() => { localStorage.removeItem(KEY); setKey(""); }).finally(() => setChecking(false));
+    applyCred(key).then((ok) => { if (!ok) { localStorage.removeItem(KEY); setKey(""); } }).finally(() => setChecking(false));
     // eslint-disable-next-line
   }, []);
 
-  const load = () => { if (authed) api.get<Appointment[]>(`/api/admin/appointments?date=${date}`, { "x-admin-key": key }).then(setItems).catch(() => {}); };
+  const visible = TABS.filter(([t]) => perms.includes(TAB_PERM[t]));
+  useEffect(() => { if (authed && visible.length && !perms.includes(TAB_PERM[tab])) setTab(visible[0][0]); /* eslint-disable-next-line */ }, [authed, perms.join()]);
+
+  const load = () => { if (authed && perms.includes("bookings")) api.get<Appointment[]>(`/api/admin/appointments?date=${date}`, { "x-admin-key": key }).then(setItems).catch(() => {}); };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [authed, date]);
 
-  async function login(e: FormEvent) {
+  async function loginOwner(e: FormEvent) { e.preventDefault(); setErr(""); const ok = await applyCred(pw); if (!ok && !err) setErr("Wrong password."); }
+  async function loginStaff(e: FormEvent) {
     e.preventDefault(); setErr("");
-    try { await api.post("/api/admin/login", { key: pw }); setKey(pw); localStorage.setItem(KEY, pw); setAuthed(true); }
-    catch { setErr("Wrong password."); }
+    try { const r = await api.post<{ token: string }>("/api/staff/login", { email, password: pw }); const ok = await applyCred(r.token); if (!ok && !err) setErr("No admin access for this account."); }
+    catch { setErr("Wrong email or password."); }
   }
   async function setStatus(a: Appointment, status: string) {
     await api.patch(`/api/admin/appointments/${a.id}`, { status }, { "x-admin-key": key }); load();
   }
-  function logout() { localStorage.removeItem(KEY); setKey(""); setAuthed(false); }
+  function logout() { localStorage.removeItem(KEY); setKey(""); setAuthed(false); setPerms([]); }
 
   if (checking) return <div className="p-16 text-center text-muted">Loading…</div>;
 
@@ -62,9 +83,13 @@ export function Admin() {
     return (
       <div className="mx-auto max-w-sm px-4 py-24">
         <h1 className="text-center font-display text-2xl font-extrabold text-ink">{SITE.name} · Admin</h1>
-        <form onSubmit={login} className="card mt-6 space-y-3 p-6">
-          <p className="text-sm text-muted">Enter your admin password to view bookings.</p>
-          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password" className="input" autoFocus />
+        <div className="mt-6 flex gap-1 rounded-full bg-surface-2 p-1">
+          {(["owner", "staff"] as const).map((m) => <button key={m} onClick={() => { setMode(m); setErr(""); }} className={`flex-1 rounded-full py-2 text-sm font-semibold ${mode === m ? "bg-brand text-white" : "text-muted"}`}>{m === "owner" ? "Owner" : "Staff"}</button>)}
+        </div>
+        <form onSubmit={mode === "owner" ? loginOwner : loginStaff} className="card mt-3 space-y-3 p-6">
+          {mode === "owner"
+            ? <><p className="text-sm text-muted">Enter the owner admin password.</p><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password" className="input" autoFocus /></>
+            : <><p className="text-sm text-muted">Staff sign in with your work email.</p><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="input" autoFocus /><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password" className="input" /></>}
           {err && <p className="text-sm font-medium text-red-600">{err}</p>}
           <button className="btn btn-primary w-full py-2.5">Sign in</button>
         </form>
@@ -79,13 +104,13 @@ export function Admin() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-extrabold text-ink">{SITE.name}</h1>
-          <p className="text-sm text-muted">Manager dashboard</p>
+          <p className="text-sm text-muted">{me.name}{me.role && me.role !== "OWNER" ? ` · ${me.role.charAt(0) + me.role.slice(1).toLowerCase()}` : " · Manager dashboard"}</p>
         </div>
         <button onClick={logout} className="btn btn-ghost px-3 py-2 text-sm">Log out</button>
       </div>
 
       <div className="no-scrollbar mt-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
-        {([["home", "🏠 Home"], ["bookings", "Bookings"], ["waitlist", "Waitlist"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"]] as const).map(([t, label]) => (
+        {visible.map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{label}</button>
         ))}
       </div>

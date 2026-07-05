@@ -181,11 +181,51 @@ app.get("/api/gift-cards/:code", async (req, res) => {
 
 // ---- Admin ----
 const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if ((req.headers["x-admin-key"] ?? "") !== ADMIN_KEY) return res.status(401).json({ error: "Unauthorized" });
+// Admin sections (permission keys). Owner has all; other roles get a subset.
+const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "website", "giftcards", "reviews", "reports"];
+// Which permission a given admin API path requires (path-based enforcement).
+function permForPath(p: string): string {
+  if (p.endsWith("/admin/me")) return ""; // any authenticated principal
+  if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses")) return "finances";
+  if (p.includes("/payouts")) return "payouts";
+  if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
+  if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
+  if (p.includes("/site-content") || p.includes("/admin/images")) return "website";
+  if (p.includes("/staff")) return "team";
+  if (p.includes("/gift-cards") || p.includes("/settings/giftcard")) return "giftcards";
+  if (p.includes("/reviews")) return "reviews";
+  if (p.includes("/courses")) return "academy";
+  if (p.includes("/packages")) return "packages";
+  if (p.includes("/waitlist")) return "waitlist";
+  if (p.includes("/categories") || p.includes("/services") || p.includes("/addons") || p.includes("/catalog") || p.includes("/reorder")) return "services";
+  if (p.includes("/appointments") || p.includes("/commissions") || p.includes("/customers")) return "bookings";
+  return "settings"; // owner-only fallback (only the master key / OWNER passes)
+}
+// Resolves the caller (master admin key OR a staff token) and enforces the path's permission.
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const key = String(req.headers["x-admin-key"] ?? "");
+  let perms: string[] | "*" | null = null, staffId: number | null = null;
+  if (key === ADMIN_KEY) perms = "*";
+  else {
+    const sid = verifyStaff(key);
+    if (sid) {
+      const st = await prisma.staff.findUnique({ where: { id: sid } }).catch(() => null);
+      if (st && st.isActive) { staffId = sid; perms = st.accessRole === "OWNER" ? "*" : (parseArr(st.permissions) as string[]); }
+    }
+  }
+  if (!perms) return res.status(401).json({ error: "Unauthorized" });
+  const need = permForPath(req.path);
+  if (need && perms !== "*" && !perms.includes(need)) return res.status(403).json({ error: "You don't have access to this section." });
+  (req as Request & { principal?: unknown }).principal = { perms, staffId };
   next();
 }
 app.post("/api/admin/login", (req, res) => { if (STR(req.body?.key) === ADMIN_KEY) return res.json({ ok: true }); res.status(401).json({ error: "Wrong password." }); });
+app.get("/api/admin/me", requireAdmin, async (req, res) => {
+  const pr = (req as Request & { principal?: { perms: string[] | "*"; staffId: number | null } }).principal!;
+  if (pr.perms === "*") return res.json({ role: "OWNER", name: "Owner", permissions: ALL_PERMS });
+  const st = pr.staffId ? await prisma.staff.findUnique({ where: { id: pr.staffId } }) : null;
+  res.json({ role: st?.accessRole ?? "STAFF", name: st?.name ?? "Staff", permissions: pr.perms });
+});
 
 app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
   const q = req.query as Record<string, string>;
@@ -269,7 +309,7 @@ app.post("/api/admin/reorder", requireAdmin, async (req, res) => {
 // ---- Admin: staff / specialists ----
 app.get("/api/admin/staff", requireAdmin, async (_req, res) => {
   const staff = await prisma.staff.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }], include: { services: { select: { id: true } } } });
-  res.json(staff.map((s) => ({ id: s.id, name: s.name, role: s.role, avatar: s.avatar, isActive: s.isActive, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates), serviceIds: s.services.map((x) => x.id), loginEmail: s.loginEmail, hasLogin: !!s.passwordHash })));
+  res.json(staff.map((s) => ({ id: s.id, name: s.name, role: s.role, avatar: s.avatar, isActive: s.isActive, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates), serviceIds: s.services.map((x) => x.id), loginEmail: s.loginEmail, hasLogin: !!s.passwordHash, accessRole: s.accessRole, permissions: parseArr(s.permissions) })));
 });
 app.post("/api/admin/staff", requireAdmin, async (req, res) => {
   const name = STR(req.body?.name, 60); if (!name) return res.status(400).json({ error: "Staff name is required." });
@@ -288,6 +328,8 @@ app.patch("/api/admin/staff/:id", requireAdmin, async (req, res) => {
   if (Array.isArray(b.serviceIds)) data.services = { set: b.serviceIds.map((id: number) => ({ id: Number(id) })) };
   if (b.loginEmail !== undefined) data.loginEmail = STR(b.loginEmail, 120).toLowerCase() || null;
   if (b.password) data.passwordHash = await bcrypt.hash(String(b.password), 10);
+  if (b.accessRole !== undefined) { const ar = STR(b.accessRole, 20).toUpperCase(); data.accessRole = ["OWNER", "MANAGER", "RECEPTIONIST", "STAFF"].includes(ar) ? ar : "STAFF"; }
+  if (Array.isArray(b.permissions)) data.permissions = JSON.stringify(b.permissions.map((x: unknown) => STR(x, 20)).filter((x: string) => ALL_PERMS.includes(x)));
   await prisma.staff.update({ where: { id: Number(req.params.id) }, data });
   res.json({ ok: true });
 });

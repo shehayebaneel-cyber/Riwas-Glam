@@ -9,6 +9,7 @@ export interface StaffFull {
   id: number; name: string; role: string; avatar: string | null; isActive: boolean;
   commissionPct: number; schedule: DaySchedule[]; blockedDates: string[]; serviceIds: number[];
   loginEmail?: string | null; hasLogin?: boolean;
+  accessRole?: string; permissions?: string[];
 }
 
 export interface Customer { id: number; name: string; email: string; phone: string }

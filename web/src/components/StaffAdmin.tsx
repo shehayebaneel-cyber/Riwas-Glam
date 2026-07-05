@@ -4,6 +4,13 @@ import type { Category, DaySchedule, StaffFull } from "../types";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const blankDay = (): DaySchedule => ({ off: false, open: "10:00", close: "19:00", breakStart: "", breakEnd: "" });
+const SECTIONS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "website", "giftcards", "reviews", "reports"];
+const PRESETS: Record<string, string[]> = {
+  OWNER: SECTIONS,
+  MANAGER: ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "academy", "packages", "loyalty", "giftcards", "reviews", "reports"],
+  RECEPTIONIST: ["bookings", "waitlist", "calendar", "giftcards", "reviews", "packages", "academy"],
+  STAFF: [],
+};
 
 export function StaffAdmin({ adminKey }: { adminKey: string }) {
   const H = { "x-admin-key": adminKey };
@@ -32,6 +39,8 @@ function StaffCard({ s, catalog, H, onChange }: { s: StaffFull; catalog: Categor
   const [blocked, setBlocked] = useState<string[]>(s.blockedDates);
   const [newBlock, setNewBlock] = useState("");
   const [pw, setPw] = useState("");
+  const [role, setRole] = useState(s.accessRole ?? "STAFF");
+  const [perms, setPerms] = useState<string[]>(s.permissions ?? []);
   const patch = (data: Record<string, unknown>) => api.patch(`/api/admin/staff/${s.id}`, data, H).then(onChange);
   const svcIds = new Set(s.serviceIds);
   const upd = (i: number, p: Partial<DaySchedule>) => setSched((x) => x.map((d, idx) => (idx === i ? { ...d, ...p } : d)));
@@ -113,6 +122,27 @@ function StaffCard({ s, catalog, H, onChange }: { s: StaffFull; catalog: Categor
               <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="new password" className="rounded-md border border-border px-2 py-1 text-sm" />
               <button onClick={() => { if (pw.trim()) { patch({ password: pw.trim() }); setPw(""); } }} disabled={!pw.trim()} className="btn btn-ghost px-3 py-1 text-xs disabled:opacity-40">Set password</button>
             </div>
+          </div>
+
+          {/* Access role & permissions */}
+          <div>
+            <p className="text-sm font-bold text-ink">Admin access</p>
+            <p className="text-xs text-muted">Controls what they can see if they sign in to the admin dashboard.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {(["STAFF", "RECEPTIONIST", "MANAGER", "OWNER"] as const).map((r) => (
+                <button key={r} onClick={() => { setRole(r); setPerms(PRESETS[r]); patch({ accessRole: r, permissions: PRESETS[r] }); }} className={`chip !text-xs ${role === r ? "chip-active" : ""}`}>{r.charAt(0) + r.slice(1).toLowerCase()}</button>
+              ))}
+            </div>
+            {role === "STAFF" && <p className="mt-2 text-xs text-muted">Staff-only: no admin dashboard — they use the /staff portal for their own calendar.</p>}
+            {role === "OWNER" && <p className="mt-2 text-xs text-muted">Full access to everything.</p>}
+            {(role === "MANAGER" || role === "RECEPTIONIST") && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {SECTIONS.map((k) => {
+                  const on = perms.includes(k);
+                  return <button key={k} onClick={() => { const n = on ? perms.filter((x) => x !== k) : [...perms, k]; setPerms(n); patch({ permissions: n }); }} className={`chip !py-1 !text-xs ${on ? "chip-active" : ""}`}>{on ? "✓ " : ""}{k}</button>;
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
