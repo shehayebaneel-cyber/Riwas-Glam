@@ -42,7 +42,7 @@ export function Home() {
             </h1>
             <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted sm:mt-6 sm:text-lg">{SITE.heroSub}</p>
             <div className="mt-6 flex items-stretch gap-2.5 sm:mt-9 sm:gap-3">
-              <Link to="/book" className="btn btn-primary flex-1 px-5 py-4 text-base sm:flex-initial sm:px-8 sm:text-lg">{t("Book Appointment")}</Link>
+              <Link to="/book" className="btn btn-primary flex-1 px-5 py-4 text-center text-base leading-tight sm:flex-initial sm:px-8 sm:text-lg">{t("Book Appointment")}</Link>
               <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost shrink-0 gap-2 px-5 py-4 sm:px-7"><WhatsAppIcon className="h-5 w-5 text-[#25D366]" /> {t("WhatsApp")}</a>
             </div>
             {reviews && reviews.count > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted sm:mt-8"><span className="tracking-[0.15em] text-accent">★★★★★</span> <span><span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</span></p>}
