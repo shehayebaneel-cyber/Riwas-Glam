@@ -233,7 +233,7 @@ app.post("/api/appointments", async (req, res) => {
 // Public approved reviews + rating summary (for the site).
 app.get("/api/reviews", async (_req, res) => {
   const [items, agg] = await Promise.all([
-    prisma.review.findMany({ where: { status: "APPROVED" }, orderBy: [{ featured: "desc" }, { createdAt: "desc" }], take: 30, select: { id: true, authorName: true, rating: true, comment: true, featured: true, createdAt: true } }),
+    prisma.review.findMany({ where: { status: "APPROVED" }, orderBy: [{ featured: "desc" }, { createdAt: "desc" }], take: 30, select: { id: true, authorName: true, rating: true, comment: true, featured: true, reply: true, createdAt: true } }),
     prisma.review.aggregate({ where: { status: "APPROVED" }, _avg: { rating: true }, _count: true }),
   ]);
   res.json({ avg: Math.round((agg._avg.rating ?? 0) * 10) / 10, count: agg._count, items });
@@ -594,6 +594,7 @@ app.patch("/api/admin/reviews/:id", requireAdmin, async (req, res) => {
   const b = req.body ?? {}; const data: Record<string, unknown> = {};
   if (b.status !== undefined) { const s = STR(b.status, 20).toUpperCase(); if (!["PENDING", "APPROVED", "HIDDEN"].includes(s)) return res.status(400).json({ error: "Invalid status." }); data.status = s; }
   if (b.featured !== undefined) data.featured = !!b.featured;
+  if (b.reply !== undefined) { data.reply = STR(b.reply, 1000); data.repliedAt = data.reply ? new Date() : null; }
   res.json(await prisma.review.update({ where: { id: Number(req.params.id) }, data }));
 });
 app.delete("/api/admin/reviews/:id", requireAdmin, async (req, res) => { await prisma.review.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });

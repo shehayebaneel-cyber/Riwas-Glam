@@ -126,6 +126,12 @@ export function Home() {
                 <div className="text-lg tracking-[0.15em] text-accent">{"★".repeat(r.rating)}<span className="text-border">{"★".repeat(5 - r.rating)}</span></div>
                 {r.comment && <p className="mt-2 text-sm leading-relaxed text-muted">“{r.comment}”</p>}
                 <p className="mt-3 font-semibold text-ink">— {r.authorName}</p>
+                {r.reply && (
+                  <div className="mt-3 rounded-xl border-l-2 border-brand bg-surface-2 p-3 text-left">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-brand">Reply from {SITE.name}</p>
+                    <p className="mt-0.5 text-sm text-ink">{r.reply}</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

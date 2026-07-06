@@ -289,6 +289,8 @@ model Review {
   comment       String   @default("")
   status        String   @default("PENDING") // PENDING | APPROVED | HIDDEN
   featured      Boolean  @default(false)
+  reply         String   @default("") // public owner reply (shown under the review)
+  repliedAt     DateTime?
   createdAt     DateTime @default(now())
 }
 

@@ -13,7 +13,7 @@ export interface StaffFull {
 }
 
 export interface Customer { id: number; name: string; email: string; phone: string }
-export interface Review { id: number; authorName: string; rating: number; comment: string; featured?: boolean; status?: string; createdAt: string }
+export interface Review { id: number; authorName: string; rating: number; comment: string; featured?: boolean; status?: string; reply?: string; createdAt: string }
 export interface GiftCard {
   id?: number; code: string; balance: number; initialValue?: number; status: string; expiresAt: string | null;
   recipientName?: string; purchaserName?: string; createdAt?: string;
