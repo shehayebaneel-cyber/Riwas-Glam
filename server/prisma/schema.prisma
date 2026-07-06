@@ -270,6 +270,33 @@ model Setting {
   value String @default("")
 }
 
+// A stock supplier the salon buys inventory from.
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @default("")
+  email     String   @default("")
+  website   String   @default("")
+  note      String   @default("")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// A purchase order to a supplier; receiving it restocks the linked products.
+model PurchaseOrder {
+  id           Int       @id @default(autoincrement())
+  supplierId   Int?
+  supplierName String    @default("")
+  status       String    @default("DRAFT") // DRAFT | ORDERED | RECEIVED | CANCELLED
+  items        String    @default("[]") // JSON [{ productId, name, qty, price }]
+  total        Float     @default(0)
+  note         String    @default("")
+  orderedAt    DateTime?
+  receivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  @@index([status])
+}
+
 // A timestamped, authored note staff leave on a customer (allergy, preference…).
 model CustomerNote {
   id         String   @id @default(cuid())

@@ -369,7 +369,7 @@ function permForPath(p: string): string {
   if (p.includes("/analytics/customers")) return "bookings"; // customer insights live on the Customers tab
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
-  if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
+  if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements") || p.includes("/suppliers") || p.includes("/purchase-orders")) return "inventory";
   if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
   if (p.includes("/promos")) return "marketing";
   if (p.includes("/notifications")) return "notifications";
@@ -507,6 +507,67 @@ app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
 });
+
+// ---- Suppliers ----
+app.get("/api/admin/suppliers", requireAdmin, async (_req, res) => {
+  const [suppliers, pos] = await Promise.all([
+    prisma.supplier.findMany({ orderBy: { name: "asc" } }),
+    prisma.purchaseOrder.findMany({ where: { status: "RECEIVED" }, select: { supplierId: true, total: true, receivedAt: true } }),
+  ]);
+  res.json(suppliers.map((s) => {
+    const theirs = pos.filter((p) => p.supplierId === s.id);
+    return { ...s, lastPurchase: theirs.map((p) => p.receivedAt).filter(Boolean).sort().pop() ?? null, totalSpent: round2(theirs.reduce((sum, p) => sum + p.total, 0)), orderCount: theirs.length };
+  }));
+});
+app.post("/api/admin/suppliers", requireAdmin, async (req, res) => {
+  const name = STR(req.body?.name, 100); if (!name) return res.status(400).json({ error: "Supplier name is required." });
+  res.status(201).json(await prisma.supplier.create({ data: { name, phone: STR(req.body?.phone, 40), email: STR(req.body?.email, 120), website: STR(req.body?.website, 200), note: STR(req.body?.note, 300) } }));
+});
+app.patch("/api/admin/suppliers/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const data: Record<string, unknown> = {};
+  if (b.name !== undefined) data.name = STR(b.name, 100);
+  if (b.phone !== undefined) data.phone = STR(b.phone, 40);
+  if (b.email !== undefined) data.email = STR(b.email, 120);
+  if (b.website !== undefined) data.website = STR(b.website, 200);
+  if (b.note !== undefined) data.note = STR(b.note, 300);
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  res.json(await prisma.supplier.update({ where: { id: Number(req.params.id) }, data }));
+});
+app.delete("/api/admin/suppliers/:id", requireAdmin, async (req, res) => { await prisma.supplier.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
+
+// ---- Purchase orders (receiving restocks products) ----
+app.get("/api/admin/purchase-orders", requireAdmin, async (_req, res) => {
+  res.json((await prisma.purchaseOrder.findMany({ orderBy: { createdAt: "desc" }, take: 200 })).map((o) => ({ ...o, items: parseArr(o.items) })));
+});
+app.post("/api/admin/purchase-orders", requireAdmin, async (req, res) => {
+  const b = req.body ?? {};
+  const items = (Array.isArray(b.items) ? b.items : []).map((i: Record<string, unknown>) => ({ productId: Number(i.productId) || 0, name: STR(i.name, 120), qty: Math.max(0, NUM(i.qty, 0)), price: Math.max(0, NUM(i.price, 0)) })).filter((i: { name: string; qty: number }) => i.name && i.qty > 0);
+  if (!items.length) return res.status(400).json({ error: "Add at least one item." });
+  const total = round2(items.reduce((s: number, i: { qty: number; price: number }) => s + i.qty * i.price, 0));
+  const supplierId = b.supplierId ? Number(b.supplierId) : null;
+  const supplier = supplierId ? await prisma.supplier.findUnique({ where: { id: supplierId } }) : null;
+  const ordered = STR(b.status, 12).toUpperCase() === "ORDERED";
+  res.status(201).json(await prisma.purchaseOrder.create({ data: { supplierId, supplierName: supplier?.name ?? STR(b.supplierName, 100), status: ordered ? "ORDERED" : "DRAFT", items: JSON.stringify(items), total, note: STR(b.note, 300), orderedAt: ordered ? new Date() : null } }));
+});
+app.post("/api/admin/purchase-orders/:id/receive", requireAdmin, async (req, res) => {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id: Number(req.params.id) } });
+  if (!po) return res.status(404).json({ error: "Not found." });
+  if (po.status === "RECEIVED") return res.json({ ...po, items: parseArr(po.items) });
+  const items = parseArr(po.items) as { productId: number; name: string; qty: number; price: number }[];
+  for (const it of items) {
+    if (!it.productId) continue;
+    await prisma.product.update({ where: { id: it.productId }, data: { quantity: { increment: it.qty }, ...(it.price > 0 ? { costPrice: it.price } : {}) } }).catch(() => {});
+    await prisma.stockMovement.create({ data: { productId: it.productId, type: "RECEIVE", quantity: it.qty, note: `PO #${po.id}${po.supplierName ? ` · ${po.supplierName}` : ""}` } }).catch(() => {});
+  }
+  const updated = await prisma.purchaseOrder.update({ where: { id: po.id }, data: { status: "RECEIVED", receivedAt: new Date() } });
+  res.json({ ...updated, items: parseArr(updated.items) });
+});
+app.post("/api/admin/purchase-orders/:id/status", requireAdmin, async (req, res) => {
+  const status = STR(req.body?.status, 12).toUpperCase();
+  if (!["DRAFT", "ORDERED", "CANCELLED"].includes(status)) return res.status(400).json({ error: "Invalid status." });
+  res.json(await prisma.purchaseOrder.update({ where: { id: Number(req.params.id) }, data: { status, ...(status === "ORDERED" ? { orderedAt: new Date() } : {}) } }));
+});
+app.delete("/api/admin/purchase-orders/:id", requireAdmin, async (req, res) => { await prisma.purchaseOrder.delete({ where: { id: Number(req.params.id) } }).catch(() => {}); res.json({ ok: true }); });
 
 // Customer analytics: lifetime value, repeat rate, retention, acquisition, top spenders.
 app.get("/api/admin/analytics/customers", requireAdmin, async (_req, res) => {
