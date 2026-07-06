@@ -202,6 +202,20 @@ model PromoCode {
   createdAt     DateTime @default(now())
 }
 
+// A record of every notification the system tried to send (audit + debugging).
+model NotificationLog {
+  id        Int      @id @default(autoincrement())
+  channel   String   @default("EMAIL") // EMAIL | WHATSAPP | SMS
+  to        String   @default("")
+  event     String   @default("")
+  subject   String   @default("")
+  body      String   @default("")
+  status    String   @default("PENDING") // SENT | FAILED | SKIPPED
+  error     String   @default("")
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
 // Simple key/value settings store the manager controls (gift-card config,
 // site content, etc.).
 model Setting {

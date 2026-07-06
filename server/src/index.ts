@@ -150,6 +150,7 @@ app.post("/api/appointments", async (req, res) => {
       note: STR(b.note, 500), promoCode: promoUsed, status: "CONFIRMED",
     },
   });
+  notify("confirmation", { email: appointment.customerEmail || undefined, phone: appointment.customerPhone || undefined, data: { name: appointment.customerName, service: appointment.serviceName, date: appointment.date, time: appointment.time } });
   res.status(201).json({ ok: true, appointment });
 });
 
@@ -175,6 +176,7 @@ app.post("/api/gift-cards/buy", async (req, res) => {
   for (let i = 0; i < 5 && (await prisma.giftCard.findUnique({ where: { code } })); i++) code = gcCode();
   const expiresAt = cfg.expiryMonths ? new Date(Date.now() + cfg.expiryMonths * 30 * 86400000) : null;
   const card = await prisma.giftCard.create({ data: { code, initialValue: amount, balance: amount, purchaserName: STR(req.body?.purchaserName, 80), purchaserEmail: STR(req.body?.purchaserEmail, 120), recipientName: STR(req.body?.recipientName, 80), message: STR(req.body?.message, 500), customerId: optionalCustomerId(req), expiresAt } });
+  if (card.purchaserEmail) notify("giftcard", { email: card.purchaserEmail, data: { code: card.code, value: `$${card.initialValue}` } });
   res.status(201).json({ code: card.code, balance: card.balance, expiresAt: card.expiresAt });
 });
 app.get("/api/gift-cards/:code", async (req, res) => {
@@ -187,7 +189,7 @@ app.get("/api/gift-cards/:code", async (req, res) => {
 // ---- Admin ----
 const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 // Admin sections (permission keys). Owner has all; other roles get a subset.
-const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "website", "giftcards", "reviews", "reports"];
+const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "website", "giftcards", "reviews", "reports"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me")) return ""; // any authenticated principal
@@ -196,6 +198,7 @@ function permForPath(p: string): string {
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
   if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
   if (p.includes("/promos")) return "marketing";
+  if (p.includes("/notifications")) return "notifications";
   if (p.includes("/site-content") || p.includes("/admin/images") || p.includes("/gallery")) return "website";
   if (p.includes("/staff")) return "team";
   if (p.includes("/gift-cards") || p.includes("/settings/giftcard")) return "giftcards";
@@ -780,6 +783,7 @@ app.post("/api/waitlist", async (req, res) => {
     preferredDate: isDate(STR(b.preferredDate)) ? STR(b.preferredDate) : "", preferredTime: STR(b.preferredTime, 10),
     note: STR(b.note, 300),
   } });
+  notify("waitlist", { phone: entry.phone, data: { name: entry.name, service: entry.serviceName || "your service" } });
   res.status(201).json({ ok: true, id: entry.id });
 });
 app.get("/api/admin/waitlist", requireAdmin, async (req, res) => {
@@ -895,6 +899,79 @@ app.patch("/api/admin/settings/loyalty", requireAdmin, async (req, res) => {
 app.get("/api/admin/redemptions", requireAdmin, async (_req, res) => res.json(await prisma.rewardRedemption.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { customer: { select: { name: true, phone: true } } } })));
 app.patch("/api/admin/redemptions/:id", requireAdmin, async (req, res) => res.json(await prisma.rewardRedemption.update({ where: { id: String(req.params.id) }, data: { status: STR(req.body?.status, 10).toUpperCase() === "USED" ? "USED" : "ISSUED" } })));
 
+// ---- Notifications ----
+const NOTIF_DEFAULT = {
+  events: { confirmation: true, cancelled: true, review: true, giftcard: true, waitlist: true, lowstock: true, reminder: true } as Record<string, boolean>,
+  channels: { email: true, whatsapp: false },
+  emailFrom: `${SALON.name} <onboarding@resend.dev>`,
+};
+const providerStatus = () => ({ email: !!process.env.RESEND_API_KEY, whatsapp: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM) });
+type NotifData = Record<string, string | number>;
+const fill = (tpl: string, d: NotifData) => tpl.replace(/\{(\w+)\}/g, (_, k) => String(d[k] ?? ""));
+const TEMPLATES: Record<string, { en: { s: string; b: string }; ar: { s: string; b: string } }> = {
+  confirmation: { en: { s: "Booking confirmed — {salon}", b: "Hi {name}, your {service} appointment on {date} at {time} is confirmed. See you soon! — {salon}" }, ar: { s: "تم تأكيد الحجز — {salon}", b: "مرحباً {name}، تم تأكيد موعدك لـ {service} بتاريخ {date} الساعة {time}. بانتظارك! — {salon}" } },
+  cancelled: { en: { s: "Booking cancelled — {salon}", b: "Hi {name}, your {service} appointment on {date} has been cancelled. — {salon}" }, ar: { s: "تم إلغاء الحجز — {salon}", b: "مرحباً {name}، تم إلغاء موعدك لـ {service} بتاريخ {date}. — {salon}" } },
+  reminder: { en: { s: "Reminder: your appointment tomorrow — {salon}", b: "Hi {name}, a reminder for your {service} appointment tomorrow ({date}) at {time}. — {salon}" }, ar: { s: "تذكير: موعدك غداً — {salon}", b: "مرحباً {name}، تذكير بموعدك لـ {service} غداً ({date}) الساعة {time}. — {salon}" } },
+  review: { en: { s: "How was your visit? — {salon}", b: "Hi {name}, thank you for visiting {salon}! We'd love your review of your {service}." }, ar: { s: "كيف كانت زيارتك؟ — {salon}", b: "مرحباً {name}، شكراً لزيارتك {salon}! يسعدنا تقييمك لخدمة {service}." } },
+  giftcard: { en: { s: "Your gift card — {salon}", b: "Your {salon} gift card is ready! Code: {code}, value {value}." }, ar: { s: "بطاقة هديتك — {salon}", b: "بطاقة هدية {salon} جاهزة! الرمز: {code}، القيمة {value}." } },
+  waitlist: { en: { s: "You're on the waiting list — {salon}", b: "Hi {name}, you're on the waiting list for {service}. We'll contact you if a spot opens." }, ar: { s: "أنتِ على قائمة الانتظار — {salon}", b: "مرحباً {name}، أنتِ على قائمة الانتظار لـ {service}. سنتواصل معك عند توفّر موعد." } },
+  lowstock: { en: { s: "Low stock alert — {salon}", b: "Low stock: {product} is down to {quantity}. Time to reorder." }, ar: { s: "تنبيه مخزون منخفض — {salon}", b: "مخزون منخفض: {product} أصبح {quantity}. حان وقت إعادة الطلب." } },
+};
+async function sendEmail(to: string, subject: string, body: string): Promise<{ ok: boolean; error?: string }> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return { ok: false, error: "no-provider" };
+  const from = (await getSetting("notifications", NOTIF_DEFAULT)).emailFrom || NOTIF_DEFAULT.emailFrom;
+  try {
+    const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to, subject, text: body }) });
+    return r.ok ? { ok: true } : { ok: false, error: `resend ${r.status}` };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+async function sendWhatsApp(to: string, body: string): Promise<{ ok: boolean; error?: string }> {
+  const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_WHATSAPP_FROM;
+  if (!sid || !token || !from) return { ok: false, error: "no-provider" };
+  try {
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, { method: "POST", headers: { Authorization: "Basic " + Buffer.from(`${sid}:${token}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ To: `whatsapp:${to}`, From: `whatsapp:${from}`, Body: body }) });
+    return r.ok ? { ok: true } : { ok: false, error: `twilio ${r.status}` };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+async function logNotif(channel: string, to: string, event: string, subject: string, body: string, r: { ok: boolean; error?: string }) {
+  await prisma.notificationLog.create({ data: { channel, to, event, subject, body, status: r.ok ? "SENT" : r.error === "no-provider" ? "SKIPPED" : "FAILED", error: r.error === "no-provider" ? "" : (r.error ?? "") } }).catch(() => {});
+}
+// Fire a notification across enabled channels. Never throws (must not break the main flow).
+async function notify(event: string, opts: { email?: string; phone?: string; lang?: "en" | "ar"; data: NotifData }) {
+  try {
+    const cfg = await getSetting("notifications", NOTIF_DEFAULT);
+    if (!cfg.events[event]) return;
+    const tpl = TEMPLATES[event]; if (!tpl) return;
+    const lang = opts.lang === "ar" ? "ar" : "en";
+    const data = { salon: SALON.name, ...opts.data };
+    const subject = fill(tpl[lang].s, data), body = fill(tpl[lang].b, data);
+    if (cfg.channels.email && opts.email) await logNotif("EMAIL", opts.email, event, subject, body, await sendEmail(opts.email, subject, body));
+    if (cfg.channels.whatsapp && opts.phone) await logNotif("WHATSAPP", opts.phone, event, subject, body, await sendWhatsApp(opts.phone, body));
+  } catch { /* swallow */ }
+}
+app.get("/api/admin/notifications", requireAdmin, async (_req, res) => res.json({ settings: await getSetting("notifications", NOTIF_DEFAULT), providers: providerStatus() }));
+app.patch("/api/admin/settings/notifications", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const cur = await getSetting("notifications", NOTIF_DEFAULT);
+  const next = {
+    events: { ...cur.events, ...(b.events && typeof b.events === "object" ? b.events : {}) },
+    channels: { email: b.channels?.email !== undefined ? !!b.channels.email : cur.channels.email, whatsapp: b.channels?.whatsapp !== undefined ? !!b.channels.whatsapp : cur.channels.whatsapp },
+    emailFrom: b.emailFrom !== undefined ? STR(b.emailFrom, 160) : cur.emailFrom,
+  };
+  await setSetting("notifications", next); res.json(next);
+});
+app.get("/api/admin/notifications/log", requireAdmin, async (_req, res) => res.json(await prisma.notificationLog.findMany({ orderBy: { id: "desc" }, take: 100 })));
+app.post("/api/admin/notifications/test", requireAdmin, async (req, res) => {
+  await notify("confirmation", { email: STR(req.body?.email, 120) || undefined, phone: STR(req.body?.phone, 40) || undefined, lang: req.body?.lang === "ar" ? "ar" : "en", data: { name: "Test", service: "Test Service", date: "2026-01-01", time: "12:00" } });
+  res.json({ ok: true });
+});
+app.post("/api/admin/notifications/run-reminders", requireAdmin, async (_req, res) => {
+  const t = new Date(); t.setUTCDate(t.getUTCDate() + 1); const d = t.toISOString().slice(0, 10);
+  const appts = await prisma.appointment.findMany({ where: { date: d, status: "CONFIRMED" } });
+  for (const a of appts) await notify("reminder", { email: a.customerEmail || undefined, phone: a.customerPhone || undefined, data: { name: a.customerName, service: a.serviceName, date: a.date, time: a.time } });
+  res.json({ ok: true, sent: appts.length });
+});
+
 // ---- Inventory ----
 // Recompute a service's material cost from its recipe (sum of qty × product cost).
 async function recomputeMaterialCost(serviceId: number) {
@@ -936,7 +1013,10 @@ async function setAppointmentStatus(id: number, status: string) {
       data.pointsAwarded = false;
     }
   }
-  return prisma.appointment.update({ where: { id }, data });
+  const updated = await prisma.appointment.update({ where: { id }, data });
+  if (status === "CANCELLED") notify("cancelled", { email: appt.customerEmail || undefined, phone: appt.customerPhone || undefined, data: { name: appt.customerName, service: appt.serviceName, date: appt.date, time: appt.time } });
+  if (status === "COMPLETED" && !appt.pointsAwarded) notify("review", { email: appt.customerEmail || undefined, phone: appt.customerPhone || undefined, data: { name: appt.customerName, service: appt.serviceName } });
+  return updated;
 }
 
 app.get("/api/admin/products", requireAdmin, async (_req, res) => res.json(await prisma.product.findMany({ orderBy: [{ name: "asc" }] })));

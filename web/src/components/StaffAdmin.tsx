@@ -4,10 +4,10 @@ import type { Category, DaySchedule, StaffFull } from "../types";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const blankDay = (): DaySchedule => ({ off: false, open: "10:00", close: "19:00", breakStart: "", breakEnd: "" });
-const SECTIONS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "website", "giftcards", "reviews", "reports"];
+const SECTIONS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "website", "giftcards", "reviews", "reports"];
 const PRESETS: Record<string, string[]> = {
   OWNER: SECTIONS,
-  MANAGER: ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "academy", "packages", "loyalty", "marketing", "giftcards", "reviews", "reports"],
+  MANAGER: ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "academy", "packages", "loyalty", "marketing", "notifications", "giftcards", "reviews", "reports"],
   RECEPTIONIST: ["bookings", "waitlist", "calendar", "giftcards", "reviews", "packages", "academy"],
   STAFF: [],
 };
