@@ -248,14 +248,16 @@ app.post("/api/gift-cards/buy", async (req, res) => {
   const cfg = await getSetting("giftcard", GC_DEFAULT);
   const amount = round2(NUM(req.body?.amount, 0));
   const method = (STR(req.body?.paymentMethod, 20).toUpperCase() || "CASH");
+  const purchaserName = STR(req.body?.purchaserName, 80), purchaserPhone = STR(req.body?.purchaserPhone, 40);
   if (!(amount >= cfg.min) || amount > cfg.max) return res.status(400).json({ error: `Amount must be between $${cfg.min} and $${cfg.max}.` });
   if (!isPaymentMethod(method)) return res.status(400).json({ error: "Please choose a valid payment method." });
+  if (!purchaserName || !purchaserPhone) return res.status(400).json({ error: "Your name and phone are required." });
   let code = gcCode();
   for (let i = 0; i < 5 && (await prisma.giftCard.findUnique({ where: { code } })); i++) code = gcCode();
   const expiresAt = cfg.expiryMonths ? new Date(Date.now() + cfg.expiryMonths * 30 * 86400000) : null;
   // Created PENDING — the code is NOT delivered until payment is confirmed (cash marked paid, or Whish webhook).
-  const card = await prisma.giftCard.create({ data: { code, initialValue: amount, balance: amount, status: "PENDING", paymentMethod: method, paymentStatus: "PENDING", purchaserName: STR(req.body?.purchaserName, 80), purchaserEmail: STR(req.body?.purchaserEmail, 120), recipientName: STR(req.body?.recipientName, 80), message: STR(req.body?.message, 500), customerId: optionalCustomerId(req), expiresAt } });
-  const payment = await createPayment({ kind: "GIFTCARD", method, amount, giftCardId: card.id, customerName: card.purchaserName, customerEmail: card.purchaserEmail });
+  const card = await prisma.giftCard.create({ data: { code, initialValue: amount, balance: amount, status: "PENDING", paymentMethod: method, paymentStatus: "PENDING", purchaserName, purchaserEmail: STR(req.body?.purchaserEmail, 120), recipientName: STR(req.body?.recipientName, 80), message: STR(req.body?.message, 500), customerId: optionalCustomerId(req), expiresAt } });
+  const payment = await createPayment({ kind: "GIFTCARD", method, amount, giftCardId: card.id, customerName: purchaserName, customerEmail: card.purchaserEmail, customerPhone: purchaserPhone });
   await prisma.giftCard.update({ where: { id: card.id }, data: { paymentId: payment.id } });
 
   if (method === "CASH") {

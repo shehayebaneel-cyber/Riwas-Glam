@@ -82,6 +82,7 @@ export function PaymentsAdmin({ adminKey }: { adminKey: string }) {
             <p className="mt-1 text-xs text-muted">
               <span className="font-mono">{p.reference}</span>
               {p.customerName ? ` · ${p.customerName}` : ""}
+              {p.customerPhone ? <> · <a href={`tel:${p.customerPhone}`} className="text-brand">{p.customerPhone}</a></> : ""}
               {` · ${new Date(p.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
               {p.providerTxnId ? ` · txn ${p.providerTxnId}` : ""}
             </p>

@@ -12,7 +12,7 @@ export function GiftCards() {
   const navigate = useNavigate();
   const [cfg, setCfg] = useState<{ amounts: number[]; min: number; max: number } | null>(null);
   const [amount, setAmount] = useState(50);
-  const [f, setF] = useState({ purchaserName: "", purchaserEmail: "", recipientName: "", message: "" });
+  const [f, setF] = useState({ purchaserName: "", purchaserPhone: "", purchaserEmail: "", recipientName: "", message: "" });
   const [payMethod, setPayMethod] = useState<PayMethod>("CASH");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -21,10 +21,11 @@ export function GiftCards() {
   const [checkErr, setCheckErr] = useState("");
 
   useEffect(() => { api.get<{ amounts: number[]; min: number; max: number }>("/api/gift-cards/config").then((c) => { setCfg(c); setAmount(c.amounts[1] ?? c.amounts[0] ?? 50); }).catch(() => {}); }, []);
-  useEffect(() => { if (customer) setF((x) => ({ ...x, purchaserName: x.purchaserName || customer.name, purchaserEmail: x.purchaserEmail || customer.email })); }, [customer]);
+  useEffect(() => { if (customer) setF((x) => ({ ...x, purchaserName: x.purchaserName || customer.name, purchaserPhone: x.purchaserPhone || customer.phone, purchaserEmail: x.purchaserEmail || customer.email })); }, [customer]);
 
   async function buy() {
     if (cfg && (amount < cfg.min || amount > cfg.max)) { setErr(`Amount must be between ${money(cfg.min)} and ${money(cfg.max)}.`); return; }
+    if (!f.purchaserName.trim() || !f.purchaserPhone.trim()) { setErr("Please enter your name and phone."); return; }
     setBusy(true); setErr("");
     try {
       // The code is delivered only after payment — go to the gateway (Whish) or our
@@ -59,9 +60,10 @@ export function GiftCards() {
           </div>
           <input value={f.recipientName} onChange={(e) => setF({ ...f, recipientName: e.target.value })} placeholder="Recipient's name" className="input" />
           <textarea value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} rows={2} placeholder="Personal message (optional)" className="input" />
+          <input value={f.purchaserName} onChange={(e) => setF({ ...f, purchaserName: e.target.value })} placeholder="Your name *" className="input" />
           <div className="grid grid-cols-2 gap-3">
-            <input value={f.purchaserName} onChange={(e) => setF({ ...f, purchaserName: e.target.value })} placeholder="Your name" className="input" />
-            <input value={f.purchaserEmail} onChange={(e) => setF({ ...f, purchaserEmail: e.target.value })} placeholder="Your email" className="input" />
+            <input value={f.purchaserPhone} onChange={(e) => setF({ ...f, purchaserPhone: e.target.value })} placeholder="Your phone *" className="input" />
+            <input value={f.purchaserEmail} onChange={(e) => setF({ ...f, purchaserEmail: e.target.value })} placeholder="Email (optional)" className="input" />
           </div>
           <PaymentMethodPicker value={payMethod} onChange={setPayMethod} />
           {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600">{err}</p>}
