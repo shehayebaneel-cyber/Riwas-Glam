@@ -70,6 +70,14 @@ html { scroll-behavior: smooth; scroll-padding-top: 5.5rem; }
   .eyebrow { @apply text-sm font-semibold uppercase tracking-[0.25em] text-brand; }
 }
 
+/* Print / Save-as-PDF: show only the .printable region. */
+@media print {
+  body * { visibility: hidden; }
+  .printable, .printable * { visibility: visible; }
+  .printable { position: absolute; inset: 0; margin: 0; padding: 24px; }
+  .no-print { display: none !important; }
+}
+
 /* Right-to-left (Arabic) layout fixes for physical utility classes. */
 [dir="rtl"] .ml-auto { margin-left: 0; margin-inline-start: auto; }
 [dir="rtl"] .mr-auto { margin-right: 0; margin-inline-end: auto; }

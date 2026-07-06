@@ -323,7 +323,7 @@ const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", 
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me") || p.endsWith("/alerts")) return ""; // any authenticated principal
-  if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses")) return "finances";
+  if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
   if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
@@ -399,6 +399,40 @@ app.get("/api/admin/me", requireAdmin, async (req, res) => {
   if (pr.perms === "*") return res.json({ role: "OWNER", name: "Owner", permissions: ALL_PERMS });
   const st = pr.staffId ? await prisma.staff.findUnique({ where: { id: pr.staffId } }) : null;
   res.json({ role: st?.accessRole ?? "STAFF", name: st?.name ?? "Staff", permissions: pr.perms });
+});
+
+// End-of-day closing report: everything that happened on a given date.
+app.get("/api/admin/reports/daily-closing", requireAdmin, async (req, res) => {
+  const date = STR((req.query as Record<string, string>).date, 10) || new Date().toLocaleDateString("en-CA");
+  if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
+  const dayStart = new Date(date + "T00:00:00"), dayEnd = new Date(date + "T23:59:59.999");
+  const [appts, payments, expenses, movements] = await Promise.all([
+    prisma.appointment.findMany({ where: { date }, include: { service: { select: { materialCost: true } } } }),
+    prisma.payment.findMany({ where: { status: "PAID", paidAt: { gte: dayStart, lte: dayEnd } } }),
+    prisma.expense.findMany({ where: { date } }),
+    prisma.stockMovement.findMany({ where: { type: "USE", createdAt: { gte: dayStart, lte: dayEnd } }, include: { product: { select: { name: true, costPrice: true } } } }),
+  ]);
+  const completed = appts.filter((a) => a.status === "COMPLETED");
+  const revenue = round2(completed.reduce((s, a) => s + a.price, 0));
+  const material = round2(completed.reduce((s, a) => s + (a.service?.materialCost ?? 0), 0));
+  const commission = round2(completed.reduce((s, a) => s + a.commissionAmount, 0));
+  const expenseTotal = round2(expenses.reduce((s, e) => s + e.amount, 0));
+  const cashReceived = round2(payments.filter((p) => p.method === "CASH").reduce((s, p) => s + p.amount, 0));
+  const whishReceived = round2(payments.filter((p) => p.method === "WHISH").reduce((s, p) => s + p.amount, 0));
+  const byStaff: Record<string, number> = {};
+  for (const a of completed) if (a.staffName) byStaff[a.staffName] = round2((byStaff[a.staffName] ?? 0) + a.commissionAmount);
+  res.json({
+    date, revenue, profit: round2(revenue - material - commission - expenseTotal),
+    material, commission, expenses: expenseTotal,
+    cashReceived, whishReceived, totalReceived: round2(cashReceived + whishReceived),
+    giftCardsSold: round2(payments.filter((p) => p.kind === "GIFTCARD").reduce((s, p) => s + p.amount, 0)),
+    appointmentsCompleted: completed.length,
+    cancelled: appts.filter((a) => a.status === "CANCELLED").length,
+    noShows: appts.filter((a) => a.status === "NO_SHOW").length,
+    booked: appts.filter((a) => a.status === "CONFIRMED").length,
+    inventoryConsumed: { count: movements.length, value: round2(movements.reduce((s, m) => s + Math.abs(m.quantity) * (m.product?.costPrice ?? 0), 0)), items: movements.slice(0, 30).map((m) => ({ name: m.product?.name ?? "", qty: Math.abs(m.quantity) })) },
+    staffCommissions: Object.entries(byStaff).map(([name, amount]) => ({ name, amount })),
+  });
 });
 
 // Admin audit trail (owner/managers with the "activity" permission).

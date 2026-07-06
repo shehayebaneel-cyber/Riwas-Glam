@@ -27,6 +27,7 @@ import { PaymentsAdmin } from "../components/PaymentsAdmin";
 import { AlertsBell } from "../components/AlertsBell";
 import { EmergencyControl } from "../components/EmergencyControl";
 import { ActivityAdmin } from "../components/ActivityAdmin";
+import { DayCloseAdmin } from "../components/DayCloseAdmin";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -37,9 +38,9 @@ const BADGE: Record<string, string> = {
   NO_SHOW: "bg-amber-400/15 text-amber-600",
 };
 
-type Tab = "home" | "bookings" | "payments" | "customers" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist" | "marketing" | "gallery" | "notifications" | "branches" | "activity";
-const TABS: [Tab, string][] = [["home", "🏠 Home"], ["bookings", "Bookings"], ["payments", "Payments"], ["waitlist", "Waitlist"], ["customers", "Customers"], ["calendar", "Calendar"], ["finances", "Finances"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["marketing", "Marketing"], ["gallery", "Gallery"], ["notifications", "Notifications"], ["branches", "Branches"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"], ["activity", "Activity"]];
-const TAB_PERM: Record<Tab, string> = { home: "finances", bookings: "bookings", payments: "bookings", customers: "bookings", waitlist: "waitlist", calendar: "calendar", finances: "finances", inventory: "inventory", payouts: "payouts", services: "services", staff: "team", academy: "academy", packages: "packages", loyalty: "loyalty", marketing: "marketing", gallery: "website", notifications: "notifications", branches: "branches", website: "website", giftcards: "giftcards", reviews: "reviews", reports: "reports", activity: "activity" };
+type Tab = "home" | "bookings" | "payments" | "customers" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist" | "marketing" | "gallery" | "notifications" | "branches" | "activity" | "dayclose";
+const TABS: [Tab, string][] = [["home", "🏠 Home"], ["bookings", "Bookings"], ["payments", "Payments"], ["waitlist", "Waitlist"], ["customers", "Customers"], ["calendar", "Calendar"], ["finances", "Finances"], ["dayclose", "Day close"], ["inventory", "Inventory"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["marketing", "Marketing"], ["gallery", "Gallery"], ["notifications", "Notifications"], ["branches", "Branches"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"], ["activity", "Activity"]];
+const TAB_PERM: Record<Tab, string> = { home: "finances", bookings: "bookings", payments: "bookings", customers: "bookings", waitlist: "waitlist", calendar: "calendar", finances: "finances", dayclose: "finances", inventory: "inventory", payouts: "payouts", services: "services", staff: "team", academy: "academy", packages: "packages", loyalty: "loyalty", marketing: "marketing", gallery: "website", notifications: "notifications", branches: "branches", website: "website", giftcards: "giftcards", reviews: "reviews", reports: "reports", activity: "activity" };
 
 export function Admin() {
   const [key, setKey] = useState(() => localStorage.getItem(KEY) ?? "");
@@ -157,6 +158,7 @@ export function Admin() {
       {tab === "reviews" && <div className="mt-5"><ReviewsAdmin adminKey={key} /></div>}
       {tab === "reports" && <div className="mt-5"><ReportsCenter adminKey={key} /></div>}
       {tab === "activity" && <div className="mt-5"><ActivityAdmin adminKey={key} /></div>}
+      {tab === "dayclose" && <div className="mt-5"><DayCloseAdmin adminKey={key} /></div>}
       {tab === "bookings" && (
         <>
           <div className="mt-4 flex items-center justify-between gap-2">
