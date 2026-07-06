@@ -45,11 +45,11 @@ function Nav() {
   }, []);
   return (
     <header className={`sticky top-0 z-40 transition-all duration-300 ${scrolled ? "border-b border-border/60 bg-surface/75 shadow-[0_14px_40px_-24px_rgba(176,104,127,0.6)] backdrop-blur-xl" : "border-b border-transparent bg-surface/85 backdrop-blur-md"}`}>
-      <div className={`mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-5 transition-all duration-300 sm:px-8 ${scrolled ? "h-[4.75rem] sm:h-20" : "h-[5.5rem] sm:h-[7rem]"}`}>
+      <div className={`mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-5 transition-all duration-300 sm:px-8 ${scrolled ? "h-20 sm:h-24" : "h-[6.5rem] sm:h-[8.5rem]"}`}>
         {/* Logo */}
         <Link to="/" className="flex shrink-0 items-center pe-3 ps-1" aria-label={SITE.name}>
           {SITE.logo
-            ? <img src={SITE.logo} alt={SITE.name} className={`w-auto drop-shadow-[0_1px_2px_rgba(74,51,48,0.28)] transition-all duration-300 ${scrolled ? "h-14 sm:h-20" : "h-[4.75rem] sm:h-[6.25rem]"}`} />
+            ? <img src={SITE.logo} alt={SITE.name} className={`w-auto drop-shadow-[0_1px_2px_rgba(74,51,48,0.28)] transition-all duration-300 ${scrolled ? "h-16 sm:h-[5.25rem]" : "h-[5.25rem] sm:h-[7.5rem]"}`} />
             : <span className={`whitespace-nowrap font-display font-extrabold tracking-tight text-ink transition-all duration-300 ${scrolled ? "text-2xl sm:text-[1.7rem]" : "text-[1.65rem] sm:text-[2.1rem]"}`}>Riwa's <span className="italic text-accent">Glam</span></span>}
         </Link>
 
