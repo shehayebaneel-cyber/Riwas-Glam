@@ -91,7 +91,8 @@ export function Payment() {
                   <QRCode value={p.kind === "GIFTCARD" && p.giftCard ? p.giftCard.code : (typeof window !== "undefined" ? window.location.href : p.reference)} size={128} />
                   <p className="text-[11px] text-muted">{p.kind === "GIFTCARD" ? "Scan at the salon to redeem" : "Scan to reopen this order"}</p>
                 </div>
-                <Link to="/" className="btn btn-primary mt-6 w-full py-3">Back to home</Link>
+                <Link to={`/receipt/${p.reference}`} className="mt-4 block text-center text-sm font-semibold text-brand">View / print receipt →</Link>
+                <Link to="/" className="btn btn-primary mt-3 w-full py-3">Back to home</Link>
               </>
             )}
 

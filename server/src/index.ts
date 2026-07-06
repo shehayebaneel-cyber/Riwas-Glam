@@ -324,6 +324,27 @@ app.get("/api/payments/:reference", async (req, res) => {
   res.json(out);
 });
 
+// Public receipt data for a payment reference (drives the printable receipt page).
+app.get("/api/receipts/:reference", async (req, res) => {
+  const p = await prisma.payment.findUnique({ where: { reference: STR(req.params.reference, 40).toUpperCase() } });
+  if (!p) return res.status(404).json({ error: "Receipt not found." });
+  const sc = { ...SITE_CONTENT_DEFAULT, ...(await getSetting("siteContent", {} as Record<string, unknown>)) } as Record<string, string>;
+  const out: Record<string, unknown> = {
+    reference: p.reference, kind: p.kind, method: p.method, status: p.status, amount: p.amount, currency: p.currency,
+    createdAt: p.createdAt, paidAt: p.paidAt, customerName: p.customerName,
+    salon: { name: sc.name, address: sc.address, phone: sc.phone, logo: sc.logo, instagram: sc.instagram, whatsapp: sc.whatsapp },
+  };
+  if (p.kind === "BOOKING" && p.appointmentId) {
+    const a = await prisma.appointment.findUnique({ where: { id: p.appointmentId } });
+    if (a) out.booking = { serviceName: a.serviceName, date: a.date, time: a.time, staffName: a.staffName, addOns: parseArr(a.addOns), price: a.price };
+  }
+  if (p.kind === "GIFTCARD" && p.giftCardId) {
+    const c = await prisma.giftCard.findUnique({ where: { id: p.giftCardId } });
+    if (c) out.giftCard = { code: c.code, initialValue: c.initialValue };
+  }
+  res.json(out);
+});
+
 // Whish calls this to confirm a payment. We only fulfil (confirm booking / issue
 // gift card) here — never before the gateway confirms. Idempotent for retries.
 app.post("/api/webhooks/whish", async (req, res) => {

@@ -9,6 +9,7 @@ import { Services } from "./pages/Services";
 import { Gallery } from "./pages/Gallery";
 import { Academy } from "./pages/Academy";
 import { Payment } from "./pages/Payment";
+import { Receipt } from "./pages/Receipt";
 import { WhatsAppIcon } from "./components/Icons";
 import { SITE } from "./config";
 
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/book" element={<BookRoute />} />
           <Route path="/gift-cards" element={<GiftCards />} />
           <Route path="/payment/:reference" element={<Payment />} />
+          <Route path="/receipt/:reference" element={<Receipt />} />
           <Route path="/account" element={<Account />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/staff" element={<StaffPortal />} />

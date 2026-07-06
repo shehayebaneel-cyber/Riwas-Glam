@@ -85,6 +85,7 @@ export function PaymentsAdmin({ adminKey }: { adminKey: string }) {
               {p.customerPhone ? <> · <a href={`tel:${p.customerPhone}`} className="text-brand">{p.customerPhone}</a></> : ""}
               {` · ${new Date(p.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
               {p.providerTxnId ? ` · txn ${p.providerTxnId}` : ""}
+              {" · "}<a href={`/receipt/${p.reference}`} target="_blank" rel="noreferrer" className="font-semibold text-brand">Receipt ↗</a>
             </p>
             {p.status === "PENDING" && (
               <div className="mt-2.5 flex flex-wrap gap-2">
