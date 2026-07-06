@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { SITE } from "../config";
 import { useCustomer } from "../context/CustomerAuth";
 import { useI18n } from "../context/I18n";
+import { InstagramIcon, PhoneIcon, PinIcon, WhatsAppIcon } from "./Icons";
 
 function LangToggle() {
   const { lang, setLang } = useI18n();
@@ -110,10 +111,10 @@ function Nav() {
             </nav>
 
             <div className="mt-6 grid grid-cols-2 gap-2.5">
-              <a href={`tel:${SITE.phone}`} className="flex items-center justify-center gap-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.97]">📞 {t("Call")}</a>
-              <a href={wa} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.97]">💬 WhatsApp</a>
+              <a href={`tel:${SITE.phone}`} className="flex items-center justify-center gap-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.97]"><PhoneIcon className="h-4 w-4 text-brand" /> {t("Call")}</a>
+              <a href={wa} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.97]"><WhatsAppIcon className="h-[18px] w-[18px] text-[#25D366]" /> WhatsApp</a>
             </div>
-            <a href={SITE.mapUrl} target="_blank" rel="noreferrer" className="mt-2.5 flex items-start gap-2.5 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.98]"><span>📍</span><span>{SITE.address}</span></a>
+            <a href={SITE.mapUrl} target="_blank" rel="noreferrer" className="mt-2.5 flex items-start gap-2.5 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.98]"><PinIcon className="mt-px h-4 w-4 shrink-0 text-brand" /><span>{SITE.address}</span></a>
 
             <div className="mt-6">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">{t("Opening hours")}</p>
@@ -130,7 +131,7 @@ function Nav() {
               </ul>
             </div>
 
-            <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="mt-6 flex h-12 items-center justify-center gap-2 rounded-2xl border border-border text-sm font-semibold text-ink transition active:scale-[0.98]">📷 @{SITE.instagram}</a>
+            <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="mt-6 flex h-12 items-center justify-center gap-2 rounded-2xl border border-border text-sm font-semibold text-ink transition active:scale-[0.98]"><InstagramIcon className="h-5 w-5" /> @{SITE.instagram}</a>
           </div>
 
           <div className="border-t border-border bg-surface px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4">
@@ -150,10 +151,10 @@ function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-10 text-center">
         <p className="font-display text-xl font-extrabold text-ink">{SITE.name}</p>
         <p className="mt-1 text-sm text-muted">{SITE.tagline} · {SITE.address}</p>
-        <div className="mt-4 flex justify-center gap-5 text-sm font-semibold text-brand">
-          <a href={`tel:${SITE.phone}`}>{t("Call")}</a>
-          <a href={wa} target="_blank" rel="noreferrer">{t("WhatsApp")}</a>
-          <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer">{t("Instagram")}</a>
+        <div className="mt-5 flex items-center justify-center gap-3">
+          <a href={`tel:${SITE.phone}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-brand transition active:scale-95 hover:bg-brand-soft" aria-label={t("Call")}><PhoneIcon className="h-5 w-5" /></a>
+          <a href={wa} target="_blank" rel="noreferrer" className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-[#25D366] transition active:scale-95 hover:bg-brand-soft" aria-label={t("WhatsApp")}><WhatsAppIcon className="h-[22px] w-[22px]" /></a>
+          <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 transition active:scale-95 hover:bg-brand-soft" aria-label={t("Instagram")}><InstagramIcon className="h-[22px] w-[22px]" /></a>
         </div>
         <p className="mt-5 text-xs text-muted">© {new Date().getFullYear()} {SITE.name}. All rights reserved.</p>
       </div>

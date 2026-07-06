@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { ServiceCard } from "../components/ServiceCard";
+import { InstagramIcon, PhoneIcon, PinIcon, WhatsAppIcon } from "../components/Icons";
 import { SITE } from "../config";
 import { api } from "../lib/api";
 import { useI18n } from "../context/I18n";
@@ -42,7 +43,7 @@ export function Home() {
             <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted sm:mt-6 sm:text-lg">{SITE.heroSub}</p>
             <div className="mt-6 flex items-stretch gap-2.5 sm:mt-9 sm:gap-3">
               <Link to="/book" className="btn btn-primary flex-1 px-5 py-4 text-base sm:flex-initial sm:px-8 sm:text-lg">{t("Book Appointment")}</Link>
-              <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost shrink-0 gap-1.5 px-5 py-4 sm:px-7">💬 {t("WhatsApp")}</a>
+              <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost shrink-0 gap-2 px-5 py-4 sm:px-7"><WhatsAppIcon className="h-5 w-5 text-[#25D366]" /> {t("WhatsApp")}</a>
             </div>
             {reviews && reviews.count > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted sm:mt-8"><span className="tracking-[0.15em] text-accent">★★★★★</span> <span><span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</span></p>}
           </div>
@@ -165,7 +166,7 @@ export function Home() {
             </a>
           ))}
         </div>
-        <div className="mt-8 text-center"><a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="btn btn-ghost px-8 py-3">Follow @{SITE.instagram}</a></div>
+        <div className="mt-8 text-center"><a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="btn btn-ghost gap-2 px-8 py-3"><InstagramIcon className="h-5 w-5" /> Follow @{SITE.instagram}</a></div>
       </section>
 
       {/* Contact / Hours */}
@@ -175,10 +176,10 @@ export function Home() {
             <p className="eyebrow">{t("Visit us")}</p>
             <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{t("Hours & Contact")}</h2>
             <div className="mt-6 space-y-3 text-sm">
-              <p className="flex items-center gap-3"><span>📍</span> <a href={SITE.mapUrl} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">{SITE.address}</a></p>
-              <p className="flex items-center gap-3"><span>📞</span> <a href={`tel:${SITE.phone}`} className="font-semibold text-ink hover:text-brand">{SITE.phone}</a></p>
-              <p className="flex items-center gap-3"><span>💬</span> <a href={wa} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">{t("WhatsApp us")}</a></p>
-              <p className="flex items-center gap-3"><span>📷</span> <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">@{SITE.instagram}</a></p>
+              <p className="flex items-center gap-3"><PinIcon className="h-[18px] w-[18px] shrink-0 text-brand" /> <a href={SITE.mapUrl} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">{SITE.address}</a></p>
+              <p className="flex items-center gap-3"><PhoneIcon className="h-[18px] w-[18px] shrink-0 text-brand" /> <a href={`tel:${SITE.phone}`} className="font-semibold text-ink hover:text-brand">{SITE.phone}</a></p>
+              <p className="flex items-center gap-3"><WhatsAppIcon className="h-[18px] w-[18px] shrink-0 text-[#25D366]" /> <a href={wa} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">{t("WhatsApp us")}</a></p>
+              <p className="flex items-center gap-3"><InstagramIcon className="h-[18px] w-[18px] shrink-0" /> <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">@{SITE.instagram}</a></p>
             </div>
           </div>
           <div className="card p-6">
