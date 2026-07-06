@@ -5,9 +5,11 @@ import { Reveal } from "../components/Reveal";
 import { ServiceCard } from "../components/ServiceCard";
 import { SITE } from "../config";
 import { api } from "../lib/api";
+import { useI18n } from "../context/I18n";
 import type { Category, Review, Service, Staff } from "../types";
 
 export function Home() {
+  const { t } = useI18n();
   const [catalog, setCatalog] = useState<Category[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [reviews, setReviews] = useState<{ avg: number; count: number; items: Review[] } | null>(null);
@@ -40,10 +42,10 @@ export function Home() {
             </h1>
             <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">{SITE.heroSub}</p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <Link to="/book" className="btn btn-primary px-8 py-4 text-lg">Book Appointment</Link>
-              <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost px-7 py-4">💬 WhatsApp</a>
+              <Link to="/book" className="btn btn-primary px-8 py-4 text-lg">{t("Book Appointment")}</Link>
+              <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost px-7 py-4">💬 {t("WhatsApp")}</a>
             </div>
-            {reviews && reviews.count > 0 && <p className="mt-8 text-sm text-muted"><span className="tracking-[0.2em] text-accent">★★★★★</span> <span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> from {reviews.count} happy clients</p>}
+            {reviews && reviews.count > 0 && <p className="mt-8 text-sm text-muted"><span className="tracking-[0.2em] text-accent">★★★★★</span> <span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</p>}
           </div>
           <div className="relative">
             <div className="absolute -inset-4 rounded-[2.75rem] bg-gradient-to-br from-brand-soft via-brand-soft/60 to-accent/25 blur-xl" />
@@ -59,9 +61,9 @@ export function Home() {
       {/* Featured services */}
       <section id="services" className="section">
         <div className="text-center">
-          <p className="eyebrow">Signature</p>
-          <h2 className="mt-2 font-display text-3xl font-extrabold text-ink sm:text-4xl">Featured services</h2>
-          <p className="mx-auto mt-3 max-w-md text-muted">A taste of what we do. Explore the full menu for everything from makeup to nails, lashes and more.</p>
+          <p className="eyebrow">{t("Signature")}</p>
+          <h2 className="mt-2 font-display text-3xl font-extrabold text-ink sm:text-4xl">{t("Featured services")}</h2>
+          <p className="mx-auto mt-3 max-w-md text-muted">{t("A taste of what we do. Explore the full menu for everything from makeup to nails, lashes and more.")}</p>
         </div>
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map(({ s, cat }, i) => (
@@ -71,15 +73,15 @@ export function Home() {
           ))}
         </div>
         <div className="mt-12 text-center">
-          <Link to="/services" className="btn btn-ghost px-8 py-3.5 text-base">View all services →</Link>
+          <Link to="/services" className="btn btn-ghost px-8 py-3.5 text-base">{t("View all services →")}</Link>
         </div>
       </section>
 
       {/* Why choose us */}
       <section className="section !pt-0">
         <div className="text-center">
-          <p className="eyebrow">Why Riwa's Glam</p>
-          <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Why choose us</h2>
+          <p className="eyebrow">{t("Why Riwa's Glam")}</p>
+          <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{t("Why choose us")}</h2>
         </div>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SITE.why.map((w) => (
@@ -96,8 +98,8 @@ export function Home() {
       <section id="gallery" className="bg-surface-2">
         <div className="section">
           <div className="text-center">
-            <p className="eyebrow">Our work</p>
-            <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Gallery</h2>
+            <p className="eyebrow">{t("Our work")}</p>
+            <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{t("Gallery")}</h2>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {galleryImgs.slice(0, 6).map((src, i) => (
@@ -106,7 +108,7 @@ export function Home() {
               </Link>
             ))}
           </div>
-          <div className="mt-8 text-center"><Link to="/gallery" className="btn btn-ghost px-8 py-3">View full gallery →</Link></div>
+          <div className="mt-8 text-center"><Link to="/gallery" className="btn btn-ghost px-8 py-3">{t("View full gallery →")}</Link></div>
         </div>
       </section>
 
@@ -114,8 +116,8 @@ export function Home() {
       {reviews && reviews.items.length > 0 && (
         <section className="section">
           <div className="text-center">
-            <p className="eyebrow">Loved by our clients</p>
-            <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">What our clients say</h2>
+            <p className="eyebrow">{t("Loved by our clients")}</p>
+            <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{t("What our clients say")}</h2>
             {reviews.count > 0 && <p className="mt-2 text-muted"><span className="font-bold text-ink">{reviews.avg.toFixed(1)}</span> <span className="text-accent">★</span> from {reviews.count} review{reviews.count === 1 ? "" : "s"}</p>}
           </div>
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -134,10 +136,10 @@ export function Home() {
       <section id="about" className="section">
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div>
-            <p className="eyebrow">About us</p>
+            <p className="eyebrow">{t("About us")}</p>
             <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{SITE.aboutTitle}</h2>
             <p className="mt-4 leading-relaxed text-muted">{SITE.about}</p>
-            <Link to="/book" className="btn btn-primary mt-6 px-6 py-3">Book your visit</Link>
+            <Link to="/book" className="btn btn-primary mt-6 px-6 py-3">{t("Book your visit")}</Link>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {staff.map((m) => (
@@ -155,7 +157,7 @@ export function Home() {
       <section className="section !pt-0">
         <div className="text-center">
           <p className="eyebrow">@{SITE.instagram}</p>
-          <h2 className="mt-2 font-display text-3xl font-extrabold text-ink sm:text-4xl">Follow the glow</h2>
+          <h2 className="mt-2 font-display text-3xl font-extrabold text-ink sm:text-4xl">{t("Follow the glow")}</h2>
         </div>
         <div className="mt-10 grid grid-cols-3 gap-2 sm:grid-cols-6">
           {SITE.galleryItems.slice(0, 6).map((it, i) => (
@@ -171,17 +173,17 @@ export function Home() {
       <section id="contact" className="bg-surface-2">
         <div className="section grid gap-10 lg:grid-cols-2">
           <div>
-            <p className="eyebrow">Visit us</p>
-            <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Hours & Contact</h2>
+            <p className="eyebrow">{t("Visit us")}</p>
+            <h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">{t("Hours & Contact")}</h2>
             <div className="mt-6 space-y-3 text-sm">
               <p className="flex items-center gap-3"><span>📍</span> <a href={SITE.mapUrl} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">{SITE.address}</a></p>
               <p className="flex items-center gap-3"><span>📞</span> <a href={`tel:${SITE.phone}`} className="font-semibold text-ink hover:text-brand">{SITE.phone}</a></p>
-              <p className="flex items-center gap-3"><span>💬</span> <a href={wa} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">WhatsApp us</a></p>
+              <p className="flex items-center gap-3"><span>💬</span> <a href={wa} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">{t("WhatsApp us")}</a></p>
               <p className="flex items-center gap-3"><span>📷</span> <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="font-semibold text-ink hover:text-brand">@{SITE.instagram}</a></p>
             </div>
           </div>
           <div className="card p-6">
-            <h3 className="font-display text-lg font-bold text-ink">Opening hours</h3>
+            <h3 className="font-display text-lg font-bold text-ink">{t("Opening hours")}</h3>
             <ul className="mt-3 divide-y divide-border text-sm">
               {SITE.hours.map((h) => (
                 <li key={h.day} className="flex justify-between py-2">
@@ -200,9 +202,9 @@ export function Home() {
       {/* CTA */}
       <section className="bg-brand text-white">
         <div className="section text-center">
-          <h2 className="font-display text-3xl font-extrabold sm:text-4xl">Ready to glow?</h2>
-          <p className="mt-2 text-white/85">Book your appointment online in under a minute.</p>
-          <Link to="/book" className="btn mt-6 bg-white px-8 py-3.5 text-lg font-bold text-brand-dark hover:bg-white/90">Book Appointment</Link>
+          <h2 className="font-display text-3xl font-extrabold sm:text-4xl">{t("Ready to glow?")}</h2>
+          <p className="mt-2 text-white/85">{t("Book your appointment online in under a minute.")}</p>
+          <Link to="/book" className="btn mt-6 bg-white px-8 py-3.5 text-lg font-bold text-brand-dark hover:bg-white/90">{t("Book Appointment")}</Link>
         </div>
       </section>
     </Layout>

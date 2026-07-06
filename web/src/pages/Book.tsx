@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
+import { useI18n } from "../context/I18n";
 import { WaitlistForm } from "../components/WaitlistForm";
 import { PromoField, type Applied } from "../components/PromoField";
 import type { Category, Staff } from "../types";
@@ -17,6 +18,7 @@ const STEPS = ["Category", "Service", "Specialist", "Date & time", "Your details
 export function Book() {
   const [params] = useSearchParams();
   const { customer, authHeader } = useCustomer();
+  const { t } = useI18n();
   const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [catalog, setCatalog] = useState<Category[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -127,7 +129,7 @@ export function Book() {
           {STEPS.map((s, i) => (
             <div key={s} className="flex flex-1 items-center gap-2">
               <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i <= step ? "bg-brand text-white" : "border border-border bg-surface text-muted"}`}>{i + 1}</div>
-              <span className={`hidden text-sm font-semibold sm:block ${i === step ? "text-ink" : "text-muted"}`}>{s}</span>
+              <span className={`hidden text-sm font-semibold sm:block ${i === step ? "text-ink" : "text-muted"}`}>{t(s)}</span>
               {i < STEPS.length - 1 && <div className={`h-0.5 flex-1 rounded ${i < step ? "bg-brand" : "bg-border"}`} />}
             </div>
           ))}
@@ -137,8 +139,8 @@ export function Book() {
           {/* Step 0 — category */}
           {step === 0 && (
             <div>
-              <h2 className="font-display text-xl font-bold text-ink">What are you here for?</h2>
-              <p className="mt-1 text-sm text-muted">Choose a category to see our services.</p>
+              <h2 className="font-display text-xl font-bold text-ink">{t("What are you here for?")}</h2>
+              <p className="mt-1 text-sm text-muted">{t("Choose a category to see our services.")}</p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {catalog.map((cat) => (
                   <button key={cat.id} onClick={() => { setCatId(cat.id); setServiceId(null); setStep(1); }} className="lift group overflow-hidden rounded-[1.5rem] border border-border bg-surface text-left">
@@ -189,12 +191,12 @@ export function Book() {
                 </div>
               )}
 
-              <button onClick={() => { setStep(0); setServiceId(null); }} className="btn btn-ghost px-5 py-2 text-sm">← Categories</button>
+              <button onClick={() => { setStep(0); setServiceId(null); }} className="btn btn-ghost px-5 py-2 text-sm">{t("← Categories")}</button>
 
               {service && (
                 <div className="sticky bottom-4 flex items-center justify-between gap-3 rounded-2xl bg-surface p-3 shadow-lg ring-1 ring-border">
                   <span className="text-sm"><span className="font-semibold text-ink">{service.name}</span> · {durationLabel(totalMin)} · <span className="text-brand">{priceLabel(total)}</span></span>
-                  <button onClick={() => setStep(2)} className="btn btn-primary px-6 py-2.5">Continue →</button>
+                  <button onClick={() => setStep(2)} className="btn btn-primary px-6 py-2.5">{t("Continue →")}</button>
                 </div>
               )}
             </div>
@@ -203,7 +205,7 @@ export function Book() {
           {/* Step 2 — specialist (only those who perform this service) */}
           {step === 2 && (
             <div>
-              <h2 className="font-display text-xl font-bold text-ink">Choose your specialist</h2>
+              <h2 className="font-display text-xl font-bold text-ink">{t("Choose your specialist")}</h2>
               {eligibleStaff.length > 1 && <p className="mt-1 text-sm text-muted">{service?.name} is done by {eligibleStaff.length} of our specialists.</p>}
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <button onClick={() => { setStaffId(null); setStep(3); }} className={`card p-4 text-left transition hover:border-brand ${staffId === null ? "border-brand" : ""}`}>
@@ -217,14 +219,14 @@ export function Book() {
                   </button>
                 ))}
               </div>
-              <button onClick={() => setStep(1)} className="btn btn-ghost mt-5 px-5 py-2 text-sm">← Back</button>
+              <button onClick={() => setStep(1)} className="btn btn-ghost mt-5 px-5 py-2 text-sm">{t("← Back")}</button>
             </div>
           )}
 
           {/* Step 3 — date & time */}
           {step === 3 && (
             <div>
-              <h2 className="font-display text-xl font-bold text-ink">Pick a date & time</h2>
+              <h2 className="font-display text-xl font-bold text-ink">{t("Pick a date & time")}</h2>
               <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1">
                 {nextDays(21).map((d) => {
                   const val = ymd(d); const closed = closedOn(d);
@@ -240,11 +242,11 @@ export function Book() {
               {date && (
                 <div className="mt-5">
                   {slots === null ? <p className="text-sm text-muted">Loading times…</p>
-                    : slots.length === 0 ? <div className="rounded-xl bg-surface p-4 text-center text-sm text-muted">No open times on {prettyDate(date)}.<br />Try another day, or <button onClick={() => setWaitOpen(true)} className="font-semibold text-brand hover:underline">join the waiting list →</button></div>
+                    : slots.length === 0 ? <div className="rounded-xl bg-surface p-4 text-center text-sm text-muted">No open times on {prettyDate(date)}.<br />Try another day, or <button onClick={() => setWaitOpen(true)} className="font-semibold text-brand hover:underline">{t("join the waiting list →")}</button></div>
                     : <div className="flex flex-wrap gap-2">{slots.map((t) => <button key={t} onClick={() => { setTime(t); setStep(4); }} className={`chip ${time === t ? "chip-active" : ""}`}>{t}</button>)}</div>}
                 </div>
               )}
-              <button onClick={() => setStep(2)} className="btn btn-ghost mt-6 px-5 py-2 text-sm">← Back</button>
+              <button onClick={() => setStep(2)} className="btn btn-ghost mt-6 px-5 py-2 text-sm">{t("← Back")}</button>
             </div>
           )}
 
@@ -257,13 +259,13 @@ export function Book() {
               </div>
               <PromoField amount={total} authHeader={authHeader} applied={promo} onApply={setPromo} onClear={() => setPromo(null)} />
               {promo && <p className="text-right text-sm font-semibold text-ink">Total after discount: <span className="text-brand">{priceLabel(Math.max(0, total - promo.discount))}</span></p>}
-              <input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} required placeholder="Your name *" className="input" />
-              <input value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} required placeholder="Phone number *" className="input" />
-              <input value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} placeholder="Email (optional)" className="input" />
-              <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} rows={2} placeholder="Anything we should know? (optional)" className="input" />
+              <input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} required placeholder={t("Your name *")} className="input" />
+              <input value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} required placeholder={t("Phone number *")} className="input" />
+              <input value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} placeholder={t("Email (optional)")} className="input" />
+              <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} rows={2} placeholder={t("Anything we should know? (optional)")} className="input" />
               {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600">{err}</p>}
-              <button type="submit" disabled={busy} className="btn btn-primary w-full py-3.5 text-lg disabled:opacity-60">{busy ? "Booking…" : "Confirm booking"}</button>
-              <button type="button" onClick={() => setStep(3)} className="btn btn-ghost w-full py-2.5 text-sm">← Back</button>
+              <button type="submit" disabled={busy} className="btn btn-primary w-full py-3.5 text-lg disabled:opacity-60">{busy ? t("Booking…") : t("Confirm booking")}</button>
+              <button type="button" onClick={() => setStep(3)} className="btn btn-ghost w-full py-2.5 text-sm">{t("← Back")}</button>
             </form>
           )}
         </div>

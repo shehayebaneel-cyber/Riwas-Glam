@@ -5,9 +5,11 @@ import { Reveal } from "../components/Reveal";
 import { ServiceCard } from "../components/ServiceCard";
 import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
+import { useI18n } from "../context/I18n";
 import type { Category, Service } from "../types";
 
 export function Services() {
+  const { t } = useI18n();
   const [catalog, setCatalog] = useState<Category[]>([]);
   const [active, setActive] = useState("All");
   const [modal, setModal] = useState<{ service: Service; catName: string } | null>(null);
@@ -19,16 +21,16 @@ export function Services() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-14 text-center">
-        <p className="eyebrow">Our menu</p>
-        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">Services</h1>
-        <p className="mx-auto mt-3 max-w-lg text-muted">Explore our full menu of beauty services. Tap any service for details, then book your specialist in seconds.</p>
+        <p className="eyebrow">{t("Our menu")}</p>
+        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">{t("Services")}</h1>
+        <p className="mx-auto mt-3 max-w-lg text-muted">{t("Explore our full menu of beauty services. Tap any service for details, then book your specialist in seconds.")}</p>
       </div>
 
       {/* Category filters */}
       <div className="sticky top-[68px] z-30 glass border-y border-border/60">
         <div className="no-scrollbar mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3">
           {chips.map((c) => (
-            <button key={c} onClick={() => setActive(c)} className={`chip whitespace-nowrap ${active === c ? "chip-active" : ""}`}>{c}</button>
+            <button key={c} onClick={() => setActive(c)} className={`chip whitespace-nowrap ${active === c ? "chip-active" : ""}`}>{c === "All" ? t("All") : c}</button>
           ))}
         </div>
       </div>
@@ -55,6 +57,7 @@ export function Services() {
 }
 
 function ServiceModal({ service, catName, onClose }: { service: Service; catName: string; onClose: () => void }) {
+  const { t } = useI18n();
   const img = SITE.categoryImages[catName] ?? SITE.heroImage;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
@@ -88,7 +91,7 @@ function ServiceModal({ service, catName, onClose }: { service: Service; catName
             </>
           )}
 
-          <Link to={`/book?service=${service.id}`} className="btn btn-primary mt-6 w-full py-3.5 text-lg">Book Now</Link>
+          <Link to={`/book?service=${service.id}`} className="btn btn-primary mt-6 w-full py-3.5 text-lg">{t("Book Now")}</Link>
         </div>
       </div>
     </div>

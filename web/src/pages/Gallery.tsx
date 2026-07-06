@@ -4,6 +4,7 @@ import { Layout } from "../components/Layout";
 import { BeforeAfter } from "../components/BeforeAfter";
 import { SITE } from "../config";
 import { api } from "../lib/api";
+import { useI18n } from "../context/I18n";
 
 type Item = { id: number; type: string; url: string; beforeUrl: string; category: string; caption: string; serviceId: number | null; serviceName: string };
 
@@ -16,6 +17,7 @@ function embedUrl(url: string): string | null {
 }
 
 export function Gallery() {
+  const { t } = useI18n();
   const [items, setItems] = useState<Item[]>([]);
   const [cat, setCat] = useState("All");
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -27,14 +29,14 @@ export function Gallery() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-14 text-center">
-        <p className="eyebrow">Our work</p>
-        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">Gallery</h1>
+        <p className="eyebrow">{t("Our work")}</p>
+        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">{t("Gallery")}</h1>
         <p className="mx-auto mt-3 max-w-lg text-muted">A glimpse of the looks we create. Follow <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="font-semibold text-brand">@{SITE.instagram}</a> for more.</p>
       </div>
 
       {cats.length > 1 && (
         <div className="no-scrollbar mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 pb-2">
-          {cats.map((c) => <button key={c} onClick={() => setCat(c)} className={`chip whitespace-nowrap ${cat === c ? "chip-active" : ""}`}>{c}</button>)}
+          {cats.map((c) => <button key={c} onClick={() => setCat(c)} className={`chip whitespace-nowrap ${cat === c ? "chip-active" : ""}`}>{c === "All" ? t("All") : c}</button>)}
         </div>
       )}
 
@@ -53,7 +55,7 @@ export function Gallery() {
                 {(it.caption || it.serviceId) && (
                   <div className="flex items-center gap-2 p-3">
                     <p className="min-w-0 flex-1 truncate text-sm text-muted">{it.caption}</p>
-                    {it.serviceId && <Link to={`/book?service=${it.serviceId}`} className="btn btn-primary shrink-0 px-3 py-1.5 text-xs">Book this look</Link>}
+                    {it.serviceId && <Link to={`/book?service=${it.serviceId}`} className="btn btn-primary shrink-0 px-3 py-1.5 text-xs">{t("Book this look")}</Link>}
                   </div>
                 )}
               </div>

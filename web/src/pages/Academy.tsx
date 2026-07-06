@@ -3,10 +3,12 @@ import { Layout } from "../components/Layout";
 import { Reveal } from "../components/Reveal";
 import { SITE } from "../config";
 import { api, priceLabel } from "../lib/api";
+import { useI18n } from "../context/I18n";
 
 type Course = { id: number; title: string; image: string; description: string; duration: string; price: number; includes: string[] };
 
 export function Academy() {
+  const { t } = useI18n();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => { api.get<Course[]>("/api/courses").then(setCourses).catch(() => {}).finally(() => setLoading(false)); }, []);
@@ -15,8 +17,8 @@ export function Academy() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-14 text-center">
-        <p className="eyebrow">Learn with us</p>
-        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">Academy</h1>
+        <p className="eyebrow">{t("Learn with us")}</p>
+        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">{t("Academy")}</h1>
         <p className="mx-auto mt-3 max-w-lg text-muted">Turn your passion into a profession. Hands-on beauty training taught by Riwa and our specialists — small groups, real practice, and a certificate to launch your career.</p>
       </div>
 
@@ -37,7 +39,7 @@ export function Academy() {
                 </div>
               </div>
               <div>
-                <p className="eyebrow">Course</p>
+                <p className="eyebrow">{t("Course")}</p>
                 <h2 className="mt-2 font-display text-3xl font-extrabold text-ink">{c.title}</h2>
                 <p className="mt-3 leading-relaxed text-muted">{c.description}</p>
                 {c.includes.length > 0 && (
@@ -46,8 +48,8 @@ export function Academy() {
                   </ul>
                 )}
                 <div className="mt-7 flex flex-wrap gap-3">
-                  <a href={wa(`Hi! I'd like to apply for the ${c.title} course (${c.duration}, ${priceLabel(c.price)}).`)} target="_blank" rel="noreferrer" className="btn btn-primary px-7 py-3.5">Apply Now</a>
-                  <a href={wa(`Hi! I have a question about the ${c.title} course.`)} target="_blank" rel="noreferrer" className="btn btn-ghost px-6 py-3.5">💬 WhatsApp Inquiry</a>
+                  <a href={wa(`Hi! I'd like to apply for the ${c.title} course (${c.duration}, ${priceLabel(c.price)}).`)} target="_blank" rel="noreferrer" className="btn btn-primary px-7 py-3.5">{t("Apply Now")}</a>
+                  <a href={wa(`Hi! I have a question about the ${c.title} course.`)} target="_blank" rel="noreferrer" className="btn btn-ghost px-6 py-3.5">💬 {t("WhatsApp Inquiry")}</a>
                 </div>
               </div>
             </div>

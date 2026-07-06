@@ -3,10 +3,12 @@ import { Link } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { Reveal } from "../components/Reveal";
 import { api, durationLabel, priceLabel } from "../lib/api";
+import { useI18n } from "../context/I18n";
 
 type Pkg = { id: number; title: string; image: string; description: string; price: number; durationMin: number; services: string[] };
 
 export function Packages() {
+  const { t } = useI18n();
   const [items, setItems] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => { api.get<Pkg[]>("/api/packages").then(setItems).catch(() => {}).finally(() => setLoading(false)); }, []);
@@ -14,9 +16,9 @@ export function Packages() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-14 text-center">
-        <p className="eyebrow">Save with a bundle</p>
-        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">Packages</h1>
-        <p className="mx-auto mt-3 max-w-lg text-muted">Our favourite services, bundled into one beautiful experience at a special price.</p>
+        <p className="eyebrow">{t("Save with a bundle")}</p>
+        <h1 className="mt-3 font-display text-5xl font-extrabold text-ink">{t("Packages")}</h1>
+        <p className="mx-auto mt-3 max-w-lg text-muted">{t("Our favourite services, bundled into one beautiful experience at a special price.")}</p>
       </div>
 
       <div className="mx-auto max-w-6xl px-4 pb-20">
@@ -39,7 +41,7 @@ export function Packages() {
                       {p.services.map((s) => <li key={s} className="flex items-center gap-2 text-sm text-ink"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-soft text-xs text-brand">✓</span> {s}</li>)}
                     </ul>
                   )}
-                  <Link to={`/book?package=${p.id}`} className="btn btn-primary mt-5 w-full py-3">Book this package</Link>
+                  <Link to={`/book?package=${p.id}`} className="btn btn-primary mt-5 w-full py-3">{t("Book this package")}</Link>
                 </div>
               </div>
             </Reveal>

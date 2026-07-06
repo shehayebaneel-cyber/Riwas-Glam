@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
+import { useI18n } from "../context/I18n";
 
 export type WaitContext = { serviceId?: number | null; serviceName?: string; staffId?: number | null; staffName?: string; date?: string };
 
 export function WaitlistForm({ context, onClose }: { context: WaitContext; onClose: () => void }) {
   const { customer, authHeader } = useCustomer();
+  const { t } = useI18n();
   const [f, setF] = useState({ name: customer?.name ?? "", phone: customer?.phone ?? "", preferredTime: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -26,13 +28,13 @@ export function WaitlistForm({ context, onClose }: { context: WaitContext; onClo
         {done ? (
           <div className="text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-2xl">✓</div>
-            <h3 className="mt-3 font-display text-xl font-bold text-ink">You're on the list!</h3>
-            <p className="mt-1 text-sm text-muted">We'll reach out if a spot opens up.</p>
-            <button onClick={onClose} className="btn btn-primary mt-4 w-full py-2.5">Done</button>
+            <h3 className="mt-3 font-display text-xl font-bold text-ink">{t("You're on the list!")}</h3>
+            <p className="mt-1 text-sm text-muted">{t("We'll reach out if a spot opens up.")}</p>
+            <button onClick={onClose} className="btn btn-primary mt-4 w-full py-2.5">{t("Done")}</button>
           </div>
         ) : (
           <>
-            <h3 className="font-display text-xl font-bold text-ink">Join the waiting list</h3>
+            <h3 className="font-display text-xl font-bold text-ink">{t("Join the waiting list")}</h3>
             <p className="mt-1 text-sm text-muted">Fully booked? We'll contact you if an earlier spot frees up.</p>
             <div className="mt-3 rounded-xl bg-surface-2 p-3 text-sm text-muted">
               {context.serviceName && <p><b className="text-ink">{context.serviceName}</b></p>}
@@ -46,8 +48,8 @@ export function WaitlistForm({ context, onClose }: { context: WaitContext; onClo
             </div>
             {err && <p className="mt-2 text-sm font-medium text-red-600">{err}</p>}
             <div className="mt-4 flex gap-2">
-              <button onClick={submit} disabled={busy} className="btn btn-primary flex-1 py-2.5 disabled:opacity-60">{busy ? "Joining…" : "Join the list"}</button>
-              <button onClick={onClose} className="btn btn-ghost px-5 py-2.5">Cancel</button>
+              <button onClick={submit} disabled={busy} className="btn btn-primary flex-1 py-2.5 disabled:opacity-60">{busy ? "…" : t("Join the list")}</button>
+              <button onClick={onClose} className="btn btn-ghost px-5 py-2.5">{t("Cancel")}</button>
             </div>
           </>
         )}

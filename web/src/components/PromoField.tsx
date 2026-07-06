@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, priceLabel } from "../lib/api";
+import { useI18n } from "../context/I18n";
 
 export type Applied = { code: string; discount: number; label: string };
 
@@ -7,6 +8,7 @@ export function PromoField({ amount, authHeader, applied, onApply, onClear }: {
   amount: number; authHeader: Record<string, string>;
   applied: Applied | null; onApply: (a: Applied) => void; onClear: () => void;
 }) {
+  const { t } = useI18n();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -25,8 +27,8 @@ export function PromoField({ amount, authHeader, applied, onApply, onClear }: {
   return (
     <div>
       <div className="flex gap-2">
-        <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Promo code" className="input flex-1" />
-        <button type="button" onClick={apply} disabled={busy} className="btn btn-ghost px-4 disabled:opacity-50">Apply</button>
+        <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder={t("Promo code")} className="input flex-1" />
+        <button type="button" onClick={apply} disabled={busy} className="btn btn-ghost px-4 disabled:opacity-50">{t("Apply")}</button>
       </div>
       {err && <p className="mt-1 text-xs font-medium text-red-600">{err}</p>}
     </div>
