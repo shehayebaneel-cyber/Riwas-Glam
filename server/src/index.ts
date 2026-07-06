@@ -408,7 +408,7 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!perms) return res.status(401).json({ error: "Unauthorized" });
   const need = permForPath(req.path);
   if (need && perms !== "*" && !perms.includes(need)) return res.status(403).json({ error: "You don't have access to this section." });
-  (req as Request & { principal?: unknown }).principal = { perms, staffId };
+  (req as Request & { principal?: unknown }).principal = { perms, staffId, actorName };
   // Audit trail: record successful admin mutations (not logins or reads).
   if (["POST", "PATCH", "PUT", "DELETE"].includes(req.method) && !req.path.endsWith("/login") && !req.path.includes("/activity")) {
     const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
@@ -1637,6 +1637,16 @@ app.patch("/api/admin/customers/:id", requireAdmin, async (req, res) => {
   await prisma.customer.update({ where: { id: Number(req.params.id) }, data });
   res.json({ ok: true });
 });
+// Authored, timestamped notes thread on a customer (allergies, preferences…).
+app.get("/api/admin/customers/:id/notes", requireAdmin, async (req, res) => {
+  res.json(await prisma.customerNote.findMany({ where: { customerId: Number(req.params.id) }, orderBy: { createdAt: "desc" } }));
+});
+app.post("/api/admin/customers/:id/notes", requireAdmin, async (req, res) => {
+  const body = STR(req.body?.body, 1000); if (!body) return res.status(400).json({ error: "Note is empty." });
+  const author = STR((req as Request & { principal?: { actorName?: string } }).principal?.actorName, 80) || "Staff";
+  res.json(await prisma.customerNote.create({ data: { customerId: Number(req.params.id), author, body } }));
+});
+app.delete("/api/admin/customers/:id/notes/:noteId", requireAdmin, async (req, res) => { await prisma.customerNote.delete({ where: { id: STR(req.params.noteId, 40) } }).catch(() => {}); res.json({ ok: true }); });
 app.post("/api/admin/customers/:id/photos", requireAdmin, async (req, res) => {
   const url = STR(req.body?.url, 600); if (!url) return res.status(400).json({ error: "No image." });
   res.json(await prisma.customerPhoto.create({ data: { customerId: Number(req.params.id), url, label: STR(req.body?.label, 60) } }));

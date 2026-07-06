@@ -63,11 +63,16 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
   const [saved, setSaved] = useState(false);
   const [view, setView] = useState<"profile" | "timeline">("profile");
   const [tags, setTags] = useState<string[]>([]);
-  const load = () => api.get<Profile>(`/api/admin/customers/${id}`, hdr).then((d) => { setP(d); setNotes(d.notes); setBirthday(d.birthday); setTags(d.tags ?? []); }).catch(() => {});
+  const [thread, setThread] = useState<{ id: string; author: string; body: string; createdAt: string }[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const loadNotes = () => api.get<{ id: string; author: string; body: string; createdAt: string }[]>(`/api/admin/customers/${id}/notes`, hdr).then(setThread).catch(() => {});
+  const load = () => { api.get<Profile>(`/api/admin/customers/${id}`, hdr).then((d) => { setP(d); setNotes(d.notes); setBirthday(d.birthday); setTags(d.tags ?? []); }).catch(() => {}); loadNotes(); };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
   const toggleTag = (t: string) => setTags((x) => (x.includes(t) ? x.filter((y) => y !== t) : [...x, t]));
 
   async function saveInfo() { await api.patch(`/api/admin/customers/${id}`, { notes, birthday, tags }, hdr); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+  async function addNote() { if (!newNote.trim()) return; await api.post(`/api/admin/customers/${id}/notes`, { body: newNote.trim() }, hdr); setNewNote(""); loadNotes(); }
+  async function delNote(nid: string) { await api.delete(`/api/admin/customers/${id}/notes/${nid}`, hdr); loadNotes(); }
   async function addPhoto(url: string) { if (!url) return; await api.post(`/api/admin/customers/${id}/photos`, { url }, hdr); load(); }
   async function delPhoto(pid: string) { await api.delete(`/api/admin/customers/${id}/photos/${pid}`, hdr); load(); }
 
@@ -117,6 +122,24 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
               <div className="flex items-end"><button onClick={saveInfo} className="btn btn-primary w-full py-2">Save {saved && "✓"}</button></div>
             </div>
             <label className="mt-3 block"><span className="mb-1 block text-xs font-semibold text-ink">Private notes</span><textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, preferences, anything to remember…" className="input text-sm" /></label>
+
+            <div className="mt-4">
+              <p className="text-sm font-bold text-ink">Staff notes</p>
+              <div className="mt-1 flex gap-2">
+                <input value={newNote} onChange={(e) => setNewNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addNote(); }} placeholder="Add a note (allergy, preference…)" className="input !py-2 text-sm" />
+                <button onClick={addNote} className="btn btn-primary px-4 py-2 text-sm">Add</button>
+              </div>
+              {thread.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  {thread.map((n) => (
+                    <div key={n.id} className="group rounded-xl bg-surface-2 p-2.5 text-sm">
+                      <p className="text-ink">{n.body}</p>
+                      <p className="mt-0.5 text-[11px] text-muted">{n.author} · {new Date(n.createdAt).toLocaleDateString()} <button onClick={() => delNote(n.id)} className="ml-1 text-red-400 opacity-0 transition group-hover:opacity-100">delete</button></p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Before/after photos */}
             <p className="mt-4 text-sm font-bold text-ink">Photos</p>

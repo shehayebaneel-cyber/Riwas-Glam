@@ -270,6 +270,16 @@ model Setting {
   value String @default("")
 }
 
+// A timestamped, authored note staff leave on a customer (allergy, preference…).
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customerId Int
+  author     String   @default("")
+  body       String
+  createdAt  DateTime @default(now())
+  @@index([customerId])
+}
+
 // End-of-day physical cash reconciliation (one per date).
 model CashDrawer {
   id             Int       @id @default(autoincrement())
