@@ -2,7 +2,7 @@
 // site for any salon. (Operating hours for booking live in server/src/config.ts.)
 export const SITE = {
   name: "Riwa's Glam",
-  logo: "/logo.png?v=3", // header logo (transparent gold); ?v busts the service-worker cache
+  logo: "", // header logo (transparent gold); ?v busts the service-worker cache
   tagline: "Makeup · Lashes · Nails · Beauty",
   heroTitle: "Look your best,\nfeel your best.",
   heroSub: "Makeup, lashes, brows, nails, facials & more — by Riwa Imad and her team in Aley, Lebanon. Book your appointment online in under a minute.",
