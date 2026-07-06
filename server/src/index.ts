@@ -483,7 +483,7 @@ app.patch("/api/admin/settings/giftcard", requireAdmin, async (req, res) => {
 // Defaults mirror the salon's launch content; admin edits are stored as overrides.
 const SITE_CONTENT_DEFAULT = {
   name: "Riwa's Glam",
-  logo: "", // header logo image; falls back to the name text when empty
+  logo: "/logo.png", // header logo (high-res transparent gold); falls back to name text when empty
   tagline: "Makeup · Lashes · Nails · Beauty",
   heroTitle: "Look your best,\nfeel your best.",
   heroSub: "Makeup, lashes, brows, nails, facials & more — by Riwa Imad and her team in Aley, Lebanon. Book your appointment online in under a minute.",
