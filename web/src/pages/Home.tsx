@@ -52,7 +52,7 @@ export function Home() {
             <img src={SITE.heroImage} alt="Riwa's Glam" className="relative h-[24rem] w-full rounded-[2.25rem] object-cover shadow-xl ring-4 ring-white/70 sm:h-[32rem]" />
             <div className="absolute -bottom-5 -left-5 hidden rounded-2xl bg-surface px-5 py-3 shadow-lg sm:block">
               <p className="font-display text-lg font-bold text-brand">Riwa's Glam</p>
-              <p className="text-xs text-muted">Hair · Nails · Beauty</p>
+              <p className="text-xs text-muted">{SITE.tagline}</p>
             </div>
           </div>
         </div>
@@ -195,7 +195,7 @@ export function Home() {
           </div>
         </div>
         <div className="mx-auto max-w-6xl px-4 pb-16">
-          <iframe title="Map to Riwa's Glam" src={`https://maps.google.com/maps?q=${encodeURIComponent(SITE.address)}&z=15&output=embed`} loading="lazy" className="h-72 w-full rounded-3xl border border-border" />
+          <iframe title="Map to Riwa's Glam" src="https://maps.google.com/maps?q=33.804211,35.606533&z=16&output=embed" loading="lazy" className="h-72 w-full rounded-3xl border border-border" />
         </div>
       </section>
 
