@@ -152,6 +152,7 @@ model Customer {
   lifetimePoints Int    @default(0) // total ever earned — drives membership tier
   birthday     String   @default("") // YYYY-MM-DD (or MM-DD) for birthday rewards
   notes        String   @default("") // private notes the salon keeps
+  tags         String   @default("[]") // JSON array of labels: VIP, Bride, Student, Influencer…
   createdAt    DateTime @default(now())
   appointments Appointment[]
   favorites    Service[] @relation("CustomerFavorites")

@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { ImageUpload } from "./ImageUpload";
 
-type ListItem = { id: number; name: string; email: string; phone: string; birthday: string; visits: number; spent: number; lastVisit: string };
+type ListItem = { id: number; name: string; email: string; phone: string; birthday: string; tags: string[]; visits: number; spent: number; lastVisit: string };
 type Profile = {
-  id: number; name: string; email: string; phone: string; birthday: string; notes: string; createdAt: string;
+  id: number; name: string; email: string; phone: string; birthday: string; notes: string; tags: string[]; createdAt: string;
   points: number; lifetimePoints: number; tier: string; visits: number; spent: number; noShows: number; cancellations: number; preferredStaff: string;
   favorites: { id: number; name: string }[];
   appointments: { id: number; date: string; time: string; serviceName: string; staffName: string; price: number; status: string }[];
@@ -14,30 +14,40 @@ type Profile = {
 };
 const money = (n: number) => "$" + (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const STATUS: Record<string, string> = { CONFIRMED: "text-emerald-600", COMPLETED: "text-brand-dark", CANCELLED: "text-red-500", NO_SHOW: "text-amber-600" };
+const TAG_PRESETS = ["VIP", "Bride", "Student", "Influencer", "Regular", "First Visit", "Corporate", "Premium"];
 
 export function CustomersAdmin({ adminKey }: { adminKey: string }) {
   const hdr = { "x-admin-key": adminKey };
   const [list, setList] = useState<ListItem[]>([]);
   const [q, setQ] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
-  useEffect(() => { api.get<ListItem[]>("/api/admin/customers", hdr).then(setList).catch(() => {}); /* eslint-disable-next-line */ }, []);
-  const shown = list.filter((c) => `${c.name} ${c.phone} ${c.email}`.toLowerCase().includes(q.toLowerCase()));
+  const load = () => api.get<ListItem[]>("/api/admin/customers", hdr).then(setList).catch(() => {});
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  const allTags = [...new Set(list.flatMap((c) => c.tags ?? []))].sort();
+  const shown = list.filter((c) => `${c.name} ${c.phone} ${c.email}`.toLowerCase().includes(q.toLowerCase()) && (!tagFilter || (c.tags ?? []).includes(tagFilter)));
 
   return (
     <div className="space-y-3">
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, phone or email…" className="input" />
+      {allTags.length > 0 && (
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
+          <button onClick={() => setTagFilter("")} className={`chip whitespace-nowrap !py-1 !text-xs ${!tagFilter ? "chip-active" : ""}`}>All</button>
+          {allTags.map((t) => <button key={t} onClick={() => setTagFilter(t === tagFilter ? "" : t)} className={`chip whitespace-nowrap !py-1 !text-xs ${tagFilter === t ? "chip-active" : ""}`}>{t}</button>)}
+        </div>
+      )}
       {list.length === 0 && <p className="card p-8 text-center text-muted">No customer accounts yet.</p>}
       {shown.map((c) => (
         <button key={c.id} onClick={() => setOpenId(c.id)} className="card flex w-full items-center gap-3 p-4 text-left transition hover:border-brand">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display font-bold text-brand">{c.name.slice(0, 1).toUpperCase()}</span>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-ink">{c.name}</p>
+            <p className="font-semibold text-ink">{c.name}{(c.tags ?? []).map((t) => <span key={t} className="ml-1.5 rounded-full bg-brand-soft px-2 py-0.5 align-middle text-[10px] font-bold text-brand-dark">{t}</span>)}</p>
             <p className="truncate text-xs text-muted">{c.phone} · {c.visits} visit{c.visits === 1 ? "" : "s"} · {money(c.spent)}</p>
           </div>
           <span className="text-muted">→</span>
         </button>
       ))}
-      {openId !== null && <ProfileModal id={openId} hdr={hdr} adminKey={adminKey} onClose={() => setOpenId(null)} />}
+      {openId !== null && <ProfileModal id={openId} hdr={hdr} adminKey={adminKey} onClose={() => { setOpenId(null); load(); }} />}
     </div>
   );
 }
@@ -50,10 +60,12 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
   const [birthday, setBirthday] = useState("");
   const [saved, setSaved] = useState(false);
   const [view, setView] = useState<"profile" | "timeline">("profile");
-  const load = () => api.get<Profile>(`/api/admin/customers/${id}`, hdr).then((d) => { setP(d); setNotes(d.notes); setBirthday(d.birthday); }).catch(() => {});
+  const [tags, setTags] = useState<string[]>([]);
+  const load = () => api.get<Profile>(`/api/admin/customers/${id}`, hdr).then((d) => { setP(d); setNotes(d.notes); setBirthday(d.birthday); setTags(d.tags ?? []); }).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
+  const toggleTag = (t: string) => setTags((x) => (x.includes(t) ? x.filter((y) => y !== t) : [...x, t]));
 
-  async function saveInfo() { await api.patch(`/api/admin/customers/${id}`, { notes, birthday }, hdr); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+  async function saveInfo() { await api.patch(`/api/admin/customers/${id}`, { notes, birthday, tags }, hdr); setSaved(true); setTimeout(() => setSaved(false), 1500); }
   async function addPhoto(url: string) { if (!url) return; await api.post(`/api/admin/customers/${id}/photos`, { url }, hdr); load(); }
   async function delPhoto(pid: string) { await api.delete(`/api/admin/customers/${id}/photos/${pid}`, hdr); load(); }
 
@@ -87,7 +99,18 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
             </div>
             <p className="mt-3 text-sm text-muted">Preferred specialist: <b className="text-ink">{p.preferredStaff}</b>{p.favorites.length > 0 && <> · Favourites: {p.favorites.map((f) => f.name).join(", ")}</>}</p>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-ink">Tags</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {[...TAG_PRESETS, ...tags.filter((t) => !TAG_PRESETS.includes(t))].map((t) => (
+                  <button key={t} type="button" onClick={() => toggleTag(t)} className={`chip !py-1 !text-xs ${tags.includes(t) ? "chip-active" : ""}`}>{t}{tags.includes(t) && !TAG_PRESETS.includes(t) ? " ✕" : ""}</button>
+                ))}
+              </div>
+              <input placeholder="+ custom tag, press Enter" onKeyDown={(e) => { const v = e.currentTarget.value.trim(); if (e.key === "Enter" && v) { e.preventDefault(); if (!tags.includes(v)) setTags([...tags, v]); e.currentTarget.value = ""; } }} className="input mt-1.5 !py-1.5 text-xs" />
+              <p className="mt-1 text-[11px] text-muted">Tags save with the button below.</p>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block"><span className="mb-1 block text-xs font-semibold text-ink">Birthday</span><input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="input !py-2 text-sm" /></label>
               <div className="flex items-end"><button onClick={saveInfo} className="btn btn-primary w-full py-2">Save {saved && "✓"}</button></div>
             </div>

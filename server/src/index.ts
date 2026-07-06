@@ -1339,7 +1339,7 @@ app.get("/api/admin/customers", requireAdmin, async (_req, res) => {
   const customers = await prisma.customer.findMany({ orderBy: { createdAt: "desc" }, include: { appointments: { select: { price: true, status: true, date: true } } } });
   res.json(customers.map((c) => {
     const done = c.appointments.filter((a) => a.status !== "CANCELLED");
-    return { id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday, createdAt: c.createdAt, visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)), lastVisit: done.map((a) => a.date).sort().pop() ?? "" };
+    return { id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday, tags: parseArr(c.tags), createdAt: c.createdAt, visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)), lastVisit: done.map((a) => a.date).sort().pop() ?? "" };
   }));
 });
 // Full customer profile for the admin.
@@ -1359,7 +1359,7 @@ app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
   const loy = await getSetting("loyalty", LOYALTY_DEFAULT);
   const giftCards = await prisma.giftCard.findMany({ where: { customerId: id }, orderBy: { createdAt: "desc" } });
   res.json({
-    id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday, notes: c.notes, createdAt: c.createdAt,
+    id: c.id, name: c.name, email: c.email, phone: c.phone, birthday: c.birthday, notes: c.notes, tags: parseArr(c.tags), createdAt: c.createdAt,
     points: c.points, lifetimePoints: c.lifetimePoints, tier: tierFor(c.lifetimePoints, loy.tiers)?.name ?? "—",
     visits: done.length, spent: round2(done.reduce((s, a) => s + a.price, 0)),
     noShows: c.appointments.filter((a) => a.status === "NO_SHOW").length,
@@ -1412,6 +1412,7 @@ app.patch("/api/admin/customers/:id", requireAdmin, async (req, res) => {
   if (b.notes !== undefined) data.notes = STR(b.notes, 2000);
   if (b.birthday !== undefined) data.birthday = /^\d{4}-\d{2}-\d{2}$|^\d{2}-\d{2}$/.test(STR(b.birthday)) ? STR(b.birthday) : "";
   if (b.phone !== undefined) data.phone = STR(b.phone, 40);
+  if (b.tags !== undefined) data.tags = JSON.stringify(Array.isArray(b.tags) ? [...new Set(b.tags.map((t: unknown) => STR(t, 30)).filter(Boolean))].slice(0, 20) : []);
   await prisma.customer.update({ where: { id: Number(req.params.id) }, data });
   res.json({ ok: true });
 });
