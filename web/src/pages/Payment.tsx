@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Layout } from "../components/Layout";
+import { QRCode } from "../components/QRCode";
 import { api, money } from "../lib/api";
 import { SITE } from "../config";
 
@@ -86,6 +87,10 @@ export function Payment() {
                     </div>
                   </>
                 )}
+                <div className="mt-5 flex flex-col items-center gap-1">
+                  <QRCode value={p.kind === "GIFTCARD" && p.giftCard ? p.giftCard.code : (typeof window !== "undefined" ? window.location.href : p.reference)} size={128} />
+                  <p className="text-[11px] text-muted">{p.kind === "GIFTCARD" ? "Scan at the salon to redeem" : "Scan to reopen this order"}</p>
+                </div>
                 <Link to="/" className="btn btn-primary mt-6 w-full py-3">Back to home</Link>
               </>
             )}

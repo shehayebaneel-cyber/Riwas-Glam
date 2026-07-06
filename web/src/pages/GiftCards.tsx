@@ -4,6 +4,7 @@ import { Layout } from "../components/Layout";
 import { api, money } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
 import { PaymentMethodPicker, type PayMethod } from "../components/PaymentMethodPicker";
+import { QRCode } from "../components/QRCode";
 import { SITE } from "../config";
 import type { GiftCard } from "../types";
 
@@ -80,9 +81,13 @@ export function GiftCards() {
           </div>
           {checkErr && <p className="mt-2 text-sm font-medium text-red-600">{checkErr}</p>}
           {checkResult && (
-            <div className="mt-3 rounded-xl bg-surface-2 p-3 text-sm">
-              <p className="font-bold text-ink">Balance: {money(checkResult.balance)} <span className="font-normal text-muted">/ {money(checkResult.initialValue ?? checkResult.balance)}</span></p>
-              <p className="text-muted">Status: {checkResult.status.toLowerCase()}{checkResult.expiresAt ? ` · expires ${new Date(checkResult.expiresAt).toLocaleDateString()}` : ""}</p>
+            <div className="mt-3 flex items-center gap-3 rounded-xl bg-surface-2 p-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-ink">Balance: {money(checkResult.balance)} <span className="font-normal text-muted">/ {money(checkResult.initialValue ?? checkResult.balance)}</span></p>
+                <p className="text-muted">Status: {checkResult.status.toLowerCase()}{checkResult.expiresAt ? ` · expires ${new Date(checkResult.expiresAt).toLocaleDateString()}` : ""}</p>
+                <p className="mt-0.5 font-mono text-xs text-muted">{checkResult.code}</p>
+              </div>
+              <QRCode value={checkResult.code} size={84} className="shrink-0" />
             </div>
           )}
         </div>

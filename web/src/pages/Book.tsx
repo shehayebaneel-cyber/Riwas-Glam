@@ -138,12 +138,13 @@ export function Book() {
         <div className="flex items-center gap-2">
           {STEPS.map((s, i) => (
             <div key={s} className="flex flex-1 items-center gap-2">
-              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i <= step ? "bg-brand text-white" : "border border-border bg-surface text-muted"}`}>{i + 1}</div>
+              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${i < step ? "bg-brand text-white" : i === step ? "bg-brand text-white ring-4 ring-brand-soft" : "border border-border bg-surface text-muted"}`}>{i < step ? "✓" : i + 1}</div>
               <span className={`hidden text-sm font-semibold sm:block ${i === step ? "text-ink" : "text-muted"}`}>{t(s)}</span>
               {i < STEPS.length - 1 && <div className={`h-0.5 flex-1 rounded ${i < step ? "bg-brand" : "bg-border"}`} />}
             </div>
           ))}
         </div>
+        <p className="mt-2 text-sm font-semibold text-ink sm:hidden">Step {step + 1} of {STEPS.length} · <span className="text-brand">{t(STEPS[step])}</span></p>
 
         <div className="mt-6">
           {/* Step 0 — category */}
