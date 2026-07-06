@@ -315,7 +315,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "branches", "website", "giftcards", "reviews", "reports"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
-  if (p.endsWith("/admin/me")) return ""; // any authenticated principal
+  if (p.endsWith("/admin/me") || p.endsWith("/alerts")) return ""; // any authenticated principal
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
@@ -358,6 +358,34 @@ app.get("/api/admin/me", requireAdmin, async (req, res) => {
   if (pr.perms === "*") return res.json({ role: "OWNER", name: "Owner", permissions: ALL_PERMS });
   const st = pr.staffId ? await prisma.staff.findUnique({ where: { id: pr.staffId } }) : null;
   res.json({ role: st?.accessRole ?? "STAFF", name: st?.name ?? "Staff", permissions: pr.perms });
+});
+
+// Unified alert center — everything that needs the owner's attention, in one place.
+app.get("/api/admin/alerts", requireAdmin, async (_req, res) => {
+  const today = new Date().toLocaleDateString("en-CA");
+  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString("en-CA");
+  const monthMM = today.slice(5, 7);
+  const [products, pendingReviews, expiringCards, pendingPayments, tmrwAppts, waiting, customers] = await Promise.all([
+    prisma.product.findMany({ where: { isActive: true }, select: { name: true, quantity: true, minQuantity: true } }),
+    prisma.review.count({ where: { status: "PENDING" } }),
+    prisma.giftCard.findMany({ where: { status: "ACTIVE", expiresAt: { gte: new Date(), lte: new Date(Date.now() + 30 * 86400000) } }, select: { code: true } }),
+    prisma.payment.count({ where: { status: "PENDING" } }),
+    prisma.appointment.count({ where: { date: tomorrow, status: "CONFIRMED" } }),
+    prisma.waitlistEntry.count({ where: { status: "WAITING" } }),
+    prisma.customer.findMany({ where: { NOT: { birthday: "" } }, select: { name: true, birthday: true } }),
+  ]);
+  const lowStock = products.filter((p) => p.minQuantity > 0 && p.quantity <= p.minQuantity);
+  const birthdays = customers.filter((c) => (c.birthday.length >= 7 ? c.birthday.slice(5, 7) : c.birthday.slice(0, 2)) === monthMM);
+  const plural = (n: number) => (n === 1 ? "" : "s");
+  const alerts: { type: string; severity: string; title: string; detail?: string; tab: string }[] = [];
+  if (lowStock.length) alerts.push({ type: "lowstock", severity: "high", title: `${lowStock.length} product${plural(lowStock.length)} low on stock`, detail: lowStock.slice(0, 3).map((p) => p.name).join(", "), tab: "inventory" });
+  if (pendingPayments) alerts.push({ type: "payments", severity: "high", title: `${pendingPayments} pending payment${plural(pendingPayments)}`, detail: "Awaiting cash or Whish confirmation", tab: "payments" });
+  if (pendingReviews) alerts.push({ type: "reviews", severity: "medium", title: `${pendingReviews} review${plural(pendingReviews)} awaiting approval`, tab: "reviews" });
+  if (expiringCards.length) alerts.push({ type: "giftcards", severity: "medium", title: `${expiringCards.length} gift card${plural(expiringCards.length)} expiring soon`, detail: "Within 30 days", tab: "giftcards" });
+  if (tmrwAppts) alerts.push({ type: "reminders", severity: "info", title: `${tmrwAppts} appointment${plural(tmrwAppts)} tomorrow`, detail: "Send reminders", tab: "bookings" });
+  if (birthdays.length) alerts.push({ type: "birthdays", severity: "info", title: `${birthdays.length} birthday${plural(birthdays.length)} this month`, detail: birthdays.slice(0, 3).map((c) => c.name).join(", "), tab: "customers" });
+  if (waiting) alerts.push({ type: "waitlist", severity: "info", title: `${waiting} on the waitlist`, tab: "waitlist" });
+  res.json({ count: alerts.length, alerts });
 });
 
 app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
