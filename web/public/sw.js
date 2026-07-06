@@ -2,7 +2,7 @@
 // app shell. Network-first for page navigations (so updates show immediately),
 // cache-first for same-origin static assets. API calls (cross-origin, to Render)
 // are never intercepted. Push-notification handling can be added here later.
-const CACHE = "riwa-glam-v8";
+const CACHE = "riwa-glam-v9";
 const SHELL = ["/", "/index.html", "/icon.svg", "/favicon.svg"];
 
 self.addEventListener("install", (e) => {

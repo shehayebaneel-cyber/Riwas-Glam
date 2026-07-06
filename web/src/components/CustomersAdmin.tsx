@@ -42,11 +42,14 @@ export function CustomersAdmin({ adminKey }: { adminKey: string }) {
   );
 }
 
+type TimelineEvent = { at: string; type: string; icon: string; title: string; detail?: string };
+
 function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<string, string>; adminKey: string; onClose: () => void }) {
   const [p, setP] = useState<Profile | null>(null);
   const [notes, setNotes] = useState("");
   const [birthday, setBirthday] = useState("");
   const [saved, setSaved] = useState(false);
+  const [view, setView] = useState<"profile" | "timeline">("profile");
   const load = () => api.get<Profile>(`/api/admin/customers/${id}`, hdr).then((d) => { setP(d); setNotes(d.notes); setBirthday(d.birthday); }).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
 
@@ -68,6 +71,14 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
               <button onClick={onClose} className="text-2xl text-muted">✕</button>
             </div>
 
+            <div className="mt-3 flex gap-1 rounded-full bg-surface-2 p-1">
+              {(["profile", "timeline"] as const).map((v) => (
+                <button key={v} onClick={() => setView(v)} className={`flex-1 rounded-full py-1.5 text-xs font-semibold ${view === v ? "bg-brand text-white" : "text-muted"}`}>{v === "profile" ? "Profile" : "Timeline"}</button>
+              ))}
+            </div>
+
+            {view === "timeline" && <Timeline id={id} hdr={hdr} />}
+            {view === "profile" && <>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Mini label="Visits" value={String(p.visits)} />
               <Mini label="Total spent" value={money(p.spent)} />
@@ -112,9 +123,33 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
                 </div>
               ))}
             </div>
+            </>}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function Timeline({ id, hdr }: { id: number; hdr: Record<string, string> }) {
+  const [data, setData] = useState<{ notes: string; events: TimelineEvent[] } | null>(null);
+  useEffect(() => { api.get<{ notes: string; events: TimelineEvent[] }>(`/api/admin/customers/${id}/timeline`, hdr).then(setData).catch(() => {}); /* eslint-disable-next-line */ }, [id]);
+  if (!data) return <p className="py-8 text-center text-muted">Loading…</p>;
+  return (
+    <div className="mt-4">
+      {data.notes && <div className="mb-4 rounded-xl bg-brand-soft/50 p-3 text-sm text-ink"><b>Staff note:</b> {data.notes}</div>}
+      {data.events.length === 0 ? <p className="py-6 text-center text-muted">No activity yet.</p> : (
+        <ol className="relative ml-2 border-l border-border">
+          {data.events.map((e, i) => (
+            <li key={i} className="mb-4 ml-5">
+              <span className="absolute -left-[11px] flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[11px] ring-2 ring-border">{e.icon}</span>
+              <p className="text-sm font-semibold text-ink">{e.title}</p>
+              {e.detail && <p className="text-xs text-muted">{e.detail}</p>}
+              <p className="text-[11px] text-muted/70">{new Date(e.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

@@ -1360,6 +1360,43 @@ app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
     redemptions: c.redemptions, photos: c.photos,
   });
 });
+// Full chronological timeline of a customer's relationship with the salon.
+app.get("/api/admin/customers/:id/timeline", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const c = await prisma.customer.findUnique({ where: { id } });
+  if (!c) return res.status(404).json({ error: "Not found." });
+  const loy = await getSetting("loyalty", LOYALTY_DEFAULT);
+  const ppd = loy.pointsPerDollar || 0;
+  const [appts, redemptions, giftCards, reviews, photos] = await Promise.all([
+    prisma.appointment.findMany({ where: { customerId: id } }),
+    prisma.rewardRedemption.findMany({ where: { customerId: id } }),
+    prisma.giftCard.findMany({ where: { customerId: id } }),
+    prisma.review.findMany({ where: { customerId: id } }),
+    prisma.customerPhoto.findMany({ where: { customerId: id } }),
+  ]);
+  const paymentIds = [...appts.map((a) => a.paymentId), ...giftCards.map((g) => g.paymentId)].filter(Boolean) as string[];
+  const payments = paymentIds.length ? await prisma.payment.findMany({ where: { id: { in: paymentIds } } }) : [];
+
+  type Ev = { at: string; type: string; icon: string; title: string; detail?: string };
+  const ev: Ev[] = [{ at: c.createdAt.toISOString(), type: "account", icon: "👤", title: "Account created" }];
+  for (const a of appts) {
+    ev.push({ at: a.createdAt.toISOString(), type: "booked", icon: "📅", title: `Booked ${a.serviceName}`, detail: `${a.date} at ${a.time}${a.staffName ? ` · ${a.staffName}` : ""}` });
+    const when = `${a.date}T${a.time || "00:00"}:00`;
+    if (a.status === "COMPLETED") {
+      ev.push({ at: when, type: "completed", icon: "✅", title: `Completed ${a.serviceName}`, detail: `$${a.price}${a.staffName ? ` · ${a.staffName}` : ""}` });
+      const pts = Math.floor(a.price * ppd);
+      if (a.pointsAwarded && pts > 0) ev.push({ at: when, type: "points", icon: "⭐", title: `Earned ${pts} points`, detail: a.serviceName });
+    } else if (a.status === "CANCELLED") ev.push({ at: when, type: "cancelled", icon: "✖️", title: `Cancelled ${a.serviceName}` });
+    else if (a.status === "NO_SHOW") ev.push({ at: when, type: "noshow", icon: "⚠️", title: `No-show · ${a.serviceName}` });
+  }
+  for (const r of redemptions) ev.push({ at: r.createdAt.toISOString(), type: "redeem", icon: "🎁", title: `Redeemed: ${r.rewardName}`, detail: r.cost ? `−${r.cost} pts` : undefined });
+  for (const g of giftCards) ev.push({ at: g.createdAt.toISOString(), type: "giftcard", icon: "💳", title: "Purchased gift card", detail: `${g.code} · $${g.initialValue}` });
+  for (const r of reviews) ev.push({ at: r.createdAt.toISOString(), type: "review", icon: "⭐", title: `Left a ${r.rating}★ review`, detail: r.status.toLowerCase() });
+  for (const ph of photos) ev.push({ at: ph.createdAt.toISOString(), type: "photo", icon: "📷", title: "Photo added", detail: ph.label || undefined });
+  for (const p of payments) ev.push({ at: (p.paidAt ?? p.createdAt).toISOString(), type: "payment", icon: "💵", title: `Payment ${p.status.toLowerCase()} · $${p.amount}`, detail: `${p.method === "WHISH" ? "Whish" : "Cash"} · ${p.kind === "GIFTCARD" ? "gift card" : "booking"}` });
+  ev.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)); // newest first
+  res.json({ notes: c.notes, events: ev });
+});
 app.patch("/api/admin/customers/:id", requireAdmin, async (req, res) => {
   const b = req.body ?? {}; const data: Record<string, unknown> = {};
   if (b.notes !== undefined) data.notes = STR(b.notes, 2000);
