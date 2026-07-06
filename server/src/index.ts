@@ -251,6 +251,38 @@ app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
   if (!updated) return res.status(404).json({ error: "Not found." });
   res.json(updated);
 });
+// Front-desk booking (staff enters a phone-in appointment). More lenient than the
+// public flow — trusts staff on timing; links an existing customer by phone/email.
+app.post("/api/admin/appointments/new", requireAdmin, async (req, res) => {
+  const b = req.body ?? {};
+  const date = STR(b.date, 10), time = STR(b.time, 5);
+  const name = STR(b.customerName, 80), phone = STR(b.customerPhone, 40), email = STR(b.customerEmail, 120);
+  if (!name || !phone) return res.status(400).json({ error: "Customer name and phone are required." });
+  if (!isDate(date) || !isTime(time)) return res.status(400).json({ error: "Please pick a valid date and time." });
+  const pr = b.packageId ? await resolvePackage(Number(b.packageId)) : null;
+  const sr = pr ? null : await resolveBooking(Number(b.serviceId), []);
+  const r = pr ?? sr;
+  if (!r) return res.status(404).json({ error: "That service or package isn't available." });
+  let staffId = b.staffId ? Number(b.staffId) : null;
+  if (staffId != null && !r.eligible.some((s) => s.id === staffId)) staffId = null;
+  if (staffId == null) {
+    const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
+    staffId = pickFreeStaff({ date, time, durationMin: r.durationMin, staff: r.eligible, existing }) ?? r.eligible[0]?.id ?? null;
+  }
+  const chosen = r.eligible.find((s) => s.id === staffId);
+  const commissionPct = chosen?.commissionPct ?? 0;
+  const cust = await prisma.customer.findFirst({ where: { OR: [...(email ? [{ email: email.toLowerCase() }] : []), { phone }] } }).catch(() => null);
+  const price = r.price;
+  const appointment = await prisma.appointment.create({ data: {
+    serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
+    staffId, customerId: cust?.id ?? null, customerName: name, customerPhone: phone, customerEmail: email,
+    date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
+    addOns: "[]", price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
+    note: STR(b.note, 500), branchId: await defaultBranchId(), status: "CONFIRMED",
+  } });
+  notify("confirmation", { email: email || undefined, phone, data: { name, service: appointment.serviceName, date, time } });
+  res.status(201).json({ ok: true, appointment });
+});
 
 // ---- Admin: catalog ----
 app.get("/api/admin/catalog", requireAdmin, async (_req, res) => {

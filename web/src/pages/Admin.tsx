@@ -22,6 +22,7 @@ import { PromoAdmin } from "../components/PromoAdmin";
 import { GalleryAdmin } from "../components/GalleryAdmin";
 import { NotificationsAdmin } from "../components/NotificationsAdmin";
 import { BranchesAdmin } from "../components/BranchesAdmin";
+import { NewBookingModal } from "../components/NewBookingModal";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -48,6 +49,7 @@ export function Admin() {
   const [err, setErr] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [items, setItems] = useState<Appointment[]>([]);
+  const [newBooking, setNewBooking] = useState(false);
   const [tab, setTab] = useState<Tab>("home");
 
   async function applyCred(cred: string): Promise<boolean> {
@@ -142,9 +144,11 @@ export function Admin() {
       {tab === "reports" && <div className="mt-5"><ReportsCenter adminKey={key} /></div>}
       {tab === "bookings" && (
         <>
-          <div className="mt-4 flex items-center justify-end">
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <button onClick={() => setNewBooking(true)} className="btn btn-primary px-4 py-2 text-sm">+ New booking</button>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto !py-2 text-sm" />
           </div>
+          {newBooking && <NewBookingModal adminKey={key} onClose={() => setNewBooking(false)} onCreated={() => { setNewBooking(false); load(); }} />}
           <div className="mt-3 grid grid-cols-3 gap-3">
             <Stat label="Appointments" value={active.length} />
             <Stat label="Completed" value={items.filter((a) => a.status === "COMPLETED").length} />
