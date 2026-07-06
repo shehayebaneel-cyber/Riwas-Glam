@@ -83,6 +83,10 @@ export function Admin() {
   async function setStatus(a: Appointment, status: string) {
     await api.patch(`/api/admin/appointments/${a.id}`, { status }, { "x-admin-key": key }); load();
   }
+  async function markPaid(a: Appointment) {
+    if (!a.paymentId) return;
+    await api.post(`/api/admin/payments/${a.paymentId}/mark-paid`, {}, { "x-admin-key": key }).catch((e) => alert(e instanceof Error ? e.message : "Couldn't mark paid.")); load();
+  }
   function logout() { localStorage.removeItem(KEY); setKey(""); setAuthed(false); setPerms([]); }
 
   if (checking) return <div className="p-16 text-center text-muted">Loading…</div>;
@@ -167,17 +171,25 @@ export function Admin() {
                 <span className="font-display text-lg font-bold text-brand-dark">{a.time}</span>
                 <span className="font-semibold text-ink">{a.serviceName}</span>
                 {a.staffName && <span className="text-sm text-muted">· {a.staffName}</span>}
-                <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE[a.status] ?? "bg-surface-2 text-muted"}`}>{a.status.replace("_", " ").toLowerCase()}</span>
+                {a.paymentStatus && <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${a.paymentStatus === "PAID" ? "bg-emerald-500/15 text-emerald-600" : a.paymentStatus === "PENDING" ? "bg-amber-400/15 text-amber-600" : "bg-surface-2 text-muted"}`}>{a.paymentMethod === "WHISH" ? "whish" : "cash"} · {a.paymentStatus === "PAID" ? "paid" : a.paymentStatus.toLowerCase()}</span>}
+                <span className={`${a.paymentStatus ? "" : "ml-auto"} rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE[a.status] ?? "bg-surface-2 text-muted"}`}>{a.status.replace("_", " ").toLowerCase()}</span>
               </div>
               <p className="mt-1 text-sm text-muted">
                 {a.customerName} · <a href={`tel:${a.customerPhone}`} className="text-brand">{a.customerPhone}</a> · ${a.price}
                 {a.note ? ` · “${a.note}”` : ""}
               </p>
-              {a.status === "CONFIRMED" && (
+              {(a.status === "CONFIRMED" || (a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId)) && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button onClick={() => setStatus(a, "COMPLETED")} className="btn btn-ghost px-3 py-1.5 text-xs text-emerald-600">Mark done</button>
-                  <button onClick={() => setStatus(a, "NO_SHOW")} className="btn btn-ghost px-3 py-1.5 text-xs text-amber-600">No-show</button>
-                  <button onClick={() => setStatus(a, "CANCELLED")} className="btn btn-ghost px-3 py-1.5 text-xs text-red-500">Cancel</button>
+                  {a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId && (
+                    <button onClick={() => markPaid(a)} className="btn btn-ghost px-3 py-1.5 text-xs font-semibold text-emerald-600">💵 Mark paid</button>
+                  )}
+                  {a.status === "CONFIRMED" && (
+                    <>
+                      <button onClick={() => setStatus(a, "COMPLETED")} className="btn btn-ghost px-3 py-1.5 text-xs text-emerald-600">Mark done</button>
+                      <button onClick={() => setStatus(a, "NO_SHOW")} className="btn btn-ghost px-3 py-1.5 text-xs text-amber-600">No-show</button>
+                      <button onClick={() => setStatus(a, "CANCELLED")} className="btn btn-ghost px-3 py-1.5 text-xs text-red-500">Cancel</button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

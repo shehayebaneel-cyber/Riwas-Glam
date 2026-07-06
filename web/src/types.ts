@@ -24,5 +24,6 @@ export interface Appointment {
   id: number; serviceName: string; staffName: string; staffId?: number | null; date: string; time: string; durationMin: number;
   price: number; commissionPct?: number; commissionAmount?: number;
   customerName: string; customerPhone: string; customerEmail: string; note: string; status: string;
+  paymentId?: string | null; paymentMethod?: string; paymentStatus?: string;
   addOns?: { name: string; price: number }[]; createdAt: string;
 }
