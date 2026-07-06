@@ -54,6 +54,7 @@ function Nav() {
   const todayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const menuLinks = [...NAV_LINKS.map((l) => ({ to: l.to, label: t(l.key), hash: false })), { to: "/#about", label: t("About"), hash: true }, { to: "/#contact", label: t("Contact"), hash: true }];
   return (
+    <>
     <header className={`sticky top-0 z-40 transition-all duration-300 ${scrolled ? "border-b border-border/60 bg-surface/75 shadow-[0_14px_40px_-24px_rgba(176,104,127,0.6)] backdrop-blur-xl" : "border-b border-transparent bg-surface/85 backdrop-blur-md"}`}>
       <div className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 transition-all duration-300 sm:px-10 lg:px-14 ${scrolled ? "h-16 sm:h-20" : "h-[4.5rem] sm:h-24"}`}>
         {/* Logo */}
@@ -84,8 +85,10 @@ function Nav() {
           <button onClick={() => setOpen((o) => !o)} className="flex h-11 w-11 items-center justify-center rounded-full text-2xl text-ink transition active:scale-95 hover:bg-surface-2 xl:hidden" aria-label="Menu">☰</button>
         </div>
       </div>
+      </header>
 
-      {/* Mobile / tablet menu — full-height slide-in panel */}
+      {/* Mobile menu panel — rendered OUTSIDE <header> because the header's
+          backdrop-blur creates a containing block that would trap `fixed`. */}
       <div className={`fixed inset-0 z-50 xl:hidden ${open ? "" : "pointer-events-none"}`} aria-hidden={!open}>
         <div onClick={() => setOpen(false)} className={`absolute inset-0 bg-ink/40 backdrop-blur-sm transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`} />
         <div className={`absolute right-0 top-0 flex h-full w-[87%] max-w-sm flex-col bg-surface shadow-[0_0_70px_-8px_rgba(74,51,48,0.55)] transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}>
@@ -135,7 +138,7 @@ function Nav() {
           </div>
         </div>
       </div>
-    </header>
+    </>
   );
 }
 
