@@ -49,7 +49,7 @@ function Nav() {
         {/* Logo */}
         <Link to="/" className="flex shrink-0 items-center pe-3 ps-1" aria-label={SITE.name}>
           {SITE.logo
-            ? <img src={SITE.logo} alt={SITE.name} className={`w-auto transition-all duration-300 ${scrolled ? "h-14 sm:h-[4.5rem]" : "h-[4.5rem] sm:h-24"}`} />
+            ? <img src={SITE.logo} alt={SITE.name} className={`w-auto drop-shadow-[0_1px_2px_rgba(74,51,48,0.28)] transition-all duration-300 ${scrolled ? "h-14 sm:h-20" : "h-[4.75rem] sm:h-[6.25rem]"}`} />
             : <span className="font-display text-2xl font-extrabold text-ink">{SITE.name}</span>}
         </Link>
 
