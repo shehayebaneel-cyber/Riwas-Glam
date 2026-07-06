@@ -168,6 +168,28 @@ app.get("/api/availability", async (req, res) => {
   res.json({ date, durationMin: r.durationMin, price: r.price, slots });
 });
 
+// Homepage widget: is there an opening today/tomorrow, and when's the next one?
+app.get("/api/next-availability", async (_req, res) => {
+  const emg = await getSetting("emergencyClose", EMERGENCY_DEFAULT);
+  if (emg.closed) return res.json({ closed: true, today: false, tomorrow: false, next: null });
+  const staffRows = await prisma.staff.findMany({ where: { isActive: true } });
+  const eligible = staffRows.map((s) => ({ id: s.id, name: s.name, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates) as string[] }));
+  const duration = SALON.slotStepMin || 30; // representative short slot
+  const now = new Date();
+  let today = false, tomorrow = false, next: { date: string; time: string } | null = null;
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(now); d.setDate(now.getDate() + i);
+    const date = d.toLocaleDateString("en-CA");
+    const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
+    const slots = availableSlots({ date, durationMin: duration, staffId: null, staff: eligible, existing, now, stepMin: SALON.slotStepMin, leadMin: SALON.leadMin });
+    if (i === 0) today = slots.length > 0;
+    if (i === 1) tomorrow = slots.length > 0;
+    if (slots.length > 0 && !next) next = { date, time: slots[0] };
+    if (next && i >= 1) break;
+  }
+  res.json({ closed: false, today, tomorrow, next });
+});
+
 app.post("/api/appointments", async (req, res) => {
   const b = req.body ?? {};
   await releaseStaleWhishHolds(); // free any expired unpaid Whish holds before checking availability

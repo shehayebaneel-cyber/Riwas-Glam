@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { ServiceCard } from "../components/ServiceCard";
+import { AvailabilityWidget } from "../components/AvailabilityWidget";
 import { InstagramIcon, PhoneIcon, PinIcon, WhatsAppIcon } from "../components/Icons";
 import { SITE } from "../config";
 import { api } from "../lib/api";
@@ -46,6 +47,7 @@ export function Home() {
               <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost shrink-0 gap-2 px-5 py-4 sm:px-7"><WhatsAppIcon className="h-5 w-5 text-[#25D366]" /> {t("WhatsApp")}</a>
             </div>
             {reviews && reviews.count > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted sm:mt-8"><span className="tracking-[0.15em] text-accent">★★★★★</span> <span><span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</span></p>}
+            <div><AvailabilityWidget /></div>
           </div>
           <div className="relative hidden lg:block">
             <div className="absolute -inset-4 rounded-[2.75rem] bg-gradient-to-br from-brand-soft via-brand-soft/60 to-accent/25 blur-xl" />
