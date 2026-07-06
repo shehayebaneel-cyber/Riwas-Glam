@@ -3,7 +3,7 @@ import { api, money } from "../lib/api";
 import type { GiftCard } from "../types";
 
 const BADGE: Record<string, string> = { ACTIVE: "bg-emerald-500/15 text-emerald-600", REDEEMED: "bg-surface-2 text-muted", VOID: "bg-red-500/15 text-red-500" };
-interface Summary { count: number; issued: number; outstanding: number; redeemed: number }
+interface Summary { count: number; issued: number; outstanding: number; redeemed: number; soldCount: number; revenue: number; redeemedCount: number; expiredCount: number; pendingCount: number }
 interface Cfg { amounts: number[]; min: number; max: number; expiryMonths: number }
 
 export function GiftCardsAdmin({ adminKey }: { adminKey: string }) {
@@ -31,9 +31,16 @@ export function GiftCardsAdmin({ adminKey }: { adminKey: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[["Issued", String(data.summary.count)], ["Total value", money(data.summary.issued)], ["Outstanding", money(data.summary.outstanding)], ["Redeemed", money(data.summary.redeemed)]].map(([l, v]) => (
-          <div key={l} className="card p-3 text-center"><p className="text-xs text-muted">{l}</p><p className="font-display text-xl font-extrabold text-ink">{v}</p></div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {([
+          ["Cards sold", String(data.summary.soldCount)],
+          ["Revenue", money(data.summary.revenue)],
+          ["Outstanding", money(data.summary.outstanding)],
+          ["Redeemed", `${money(data.summary.redeemed)} · ${data.summary.redeemedCount}`],
+          ["Pending", String(data.summary.pendingCount)],
+          ["Expired", String(data.summary.expiredCount)],
+        ] as [string, string][]).map(([l, v]) => (
+          <div key={l} className="card p-3 text-center"><p className="text-xs text-muted">{l}</p><p className="font-display text-lg font-extrabold text-ink">{v}</p></div>
         ))}
       </div>
 

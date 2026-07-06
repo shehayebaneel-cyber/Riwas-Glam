@@ -602,10 +602,19 @@ app.delete("/api/admin/reviews/:id", requireAdmin, async (req, res) => { await p
 // ---- Admin: gift cards + settings ----
 app.get("/api/admin/gift-cards", requireAdmin, async (_req, res) => {
   const cards = await prisma.giftCard.findMany({ orderBy: { createdAt: "desc" }, take: 300 });
+  const now = Date.now();
+  const sold = cards.filter((c) => c.status === "ACTIVE" || c.status === "REDEEMED"); // paid & issued
   const issued = round2(cards.reduce((s, c) => s + c.initialValue, 0));
+  const revenue = round2(sold.reduce((s, c) => s + c.initialValue, 0)); // money actually collected for cards
   const outstanding = round2(cards.filter((c) => c.status === "ACTIVE").reduce((s, c) => s + c.balance, 0));
-  const redeemed = round2(cards.reduce((s, c) => s + (c.status === "VOID" ? 0 : c.initialValue - c.balance), 0));
-  res.json({ items: cards, summary: { count: cards.length, issued, outstanding, redeemed } });
+  const redeemedValue = round2(cards.reduce((s, c) => s + (c.status === "VOID" || c.status === "PENDING" ? 0 : c.initialValue - c.balance), 0));
+  res.json({ items: cards, summary: {
+    count: cards.length, issued, outstanding, redeemed: redeemedValue,
+    soldCount: sold.length, revenue,
+    redeemedCount: cards.filter((c) => c.status === "REDEEMED").length,
+    expiredCount: cards.filter((c) => c.status === "ACTIVE" && c.expiresAt && new Date(c.expiresAt).getTime() < now).length,
+    pendingCount: cards.filter((c) => c.status === "PENDING").length,
+  } });
 });
 app.post("/api/admin/gift-cards/:id/redeem", requireAdmin, async (req, res) => {
   const card = await prisma.giftCard.findUnique({ where: { id: Number(req.params.id) } });
