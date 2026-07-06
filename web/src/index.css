@@ -36,6 +36,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Mobile touch polish: no blue tap flash, smooth in-page scrolling, and
+   anchor targets that clear the sticky header instead of hiding beneath it. */
+* { -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; scroll-padding-top: 5.5rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
 .font-display { font-family: var(--font-display); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -52,7 +58,7 @@ body {
 .btn:hover { transform: translateY(-1px); }
 
 @layer components {
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[0.97]; }
   .btn-primary { @apply bg-brand text-white hover:bg-brand-dark; box-shadow: 0 12px 26px -12px rgba(176, 104, 127, 0.65); }
   .btn-gold { @apply bg-accent text-white hover:opacity-90; }
   .btn-ghost { @apply border border-border bg-surface text-ink hover:bg-surface-2; }
@@ -60,7 +66,7 @@ body {
   .input { @apply w-full rounded-2xl border border-border bg-surface px-4 py-3 text-ink outline-none transition focus:border-brand; }
   .chip { @apply rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand; }
   .chip-active { @apply border-brand bg-brand text-white; }
-  .section { @apply mx-auto max-w-6xl px-4 py-20 sm:py-28; }
+  .section { @apply mx-auto max-w-6xl px-5 py-16 sm:px-4 sm:py-28; }
   .eyebrow { @apply text-sm font-semibold uppercase tracking-[0.25em] text-brand; }
 }
 

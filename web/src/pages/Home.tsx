@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
-import { Reveal } from "../components/Reveal";
 import { ServiceCard } from "../components/ServiceCard";
 import { SITE } from "../config";
 import { api } from "../lib/api";
@@ -32,25 +31,25 @@ export function Home() {
       <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute -right-24 -top-32 h-[28rem] w-[28rem] rounded-full bg-brand-soft blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-accent/10 blur-3xl" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:py-24 lg:grid-cols-2">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-11 pt-9 sm:px-4 sm:py-24 lg:grid-cols-2">
           <div>
-            <p className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.28em] text-brand"><span className="h-px w-10 bg-accent" /> {SITE.tagline}</p>
-            <h1 className="mt-6 font-display text-5xl font-extrabold leading-[1.06] text-ink sm:text-6xl">
+            <p className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.26em] text-brand sm:text-sm sm:tracking-[0.28em]"><span className="h-px w-7 bg-accent sm:w-10" /> {SITE.tagline}</p>
+            <h1 className="mt-5 font-display text-[2.7rem] font-extrabold leading-[1.04] text-ink sm:mt-6 sm:text-6xl">
               {SITE.heroTitle.split("\n").map((ln, i, arr) => (
                 <span key={i}>{i > 0 && <br />}<span className={i === arr.length - 1 ? "italic text-brand" : ""}>{ln}</span></span>
               ))}
             </h1>
-            <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">{SITE.heroSub}</p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <Link to="/book" className="btn btn-primary px-8 py-4 text-lg">{t("Book Appointment")}</Link>
-              <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost px-7 py-4">💬 {t("WhatsApp")}</a>
+            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted sm:mt-6 sm:text-lg">{SITE.heroSub}</p>
+            <div className="mt-6 flex items-stretch gap-2.5 sm:mt-9 sm:gap-3">
+              <Link to="/book" className="btn btn-primary flex-1 px-5 py-4 text-base sm:flex-initial sm:px-8 sm:text-lg">{t("Book Appointment")}</Link>
+              <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost shrink-0 gap-1.5 px-5 py-4 sm:px-7">💬 {t("WhatsApp")}</a>
             </div>
-            {reviews && reviews.count > 0 && <p className="mt-8 text-sm text-muted"><span className="tracking-[0.2em] text-accent">★★★★★</span> <span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</p>}
+            {reviews && reviews.count > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted sm:mt-8"><span className="tracking-[0.15em] text-accent">★★★★★</span> <span><span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</span></p>}
           </div>
-          <div className="relative">
+          <div className="relative hidden lg:block">
             <div className="absolute -inset-4 rounded-[2.75rem] bg-gradient-to-br from-brand-soft via-brand-soft/60 to-accent/25 blur-xl" />
             <img src={SITE.heroImage} alt="Riwa's Glam" className="relative h-[24rem] w-full rounded-[2.25rem] object-cover shadow-xl ring-4 ring-white/70 sm:h-[32rem]" />
-            <div className="absolute -bottom-5 -left-5 hidden rounded-2xl bg-surface px-5 py-3 shadow-lg sm:block">
+            <div className="absolute -bottom-5 -left-5 rounded-2xl bg-surface px-5 py-3 shadow-lg">
               <p className="font-display text-lg font-bold text-brand">Riwa's Glam</p>
               <p className="text-xs text-muted">{SITE.tagline}</p>
             </div>
@@ -58,21 +57,21 @@ export function Home() {
         </div>
       </section>
 
-      {/* Featured services */}
-      <section id="services" className="section">
-        <div className="text-center">
+      {/* Featured services — swipeable on mobile, grid on larger screens */}
+      <section id="services" className="py-16 sm:py-28">
+        <div className="mx-auto max-w-6xl px-5 text-center sm:px-4">
           <p className="eyebrow">{t("Signature")}</p>
-          <h2 className="mt-2 font-display text-3xl font-extrabold text-ink sm:text-4xl">{t("Featured services")}</h2>
-          <p className="mx-auto mt-3 max-w-md text-muted">{t("A taste of what we do. Explore the full menu for everything from makeup to nails, lashes and more.")}</p>
+          <h2 className="mt-2 font-display text-[1.9rem] font-extrabold text-ink sm:text-4xl">{t("Featured services")}</h2>
+          <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted">{t("A taste of what we do. Explore the full menu for everything from makeup to nails, lashes and more.")}</p>
         </div>
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {featured.map(({ s, cat }, i) => (
-            <Reveal key={s.id} delay={(i % 3) * 80}>
+        <div className="no-scrollbar mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-3 sm:mx-auto sm:mt-12 sm:grid sm:max-w-6xl sm:snap-none sm:grid-cols-2 sm:gap-6 sm:overflow-visible sm:px-4 sm:pb-0 lg:grid-cols-3">
+          {featured.map(({ s, cat }) => (
+            <div key={s.id} className="w-[78%] max-w-[300px] shrink-0 snap-start sm:w-auto sm:max-w-none">
               <ServiceCard service={s} catName={cat} onClick={() => navigate(`/book?service=${s.id}`)} />
-            </Reveal>
+            </div>
           ))}
         </div>
-        <div className="mt-12 text-center">
+        <div className="mx-auto mt-9 max-w-6xl px-5 text-center sm:mt-12 sm:px-4">
           <Link to="/services" className="btn btn-ghost px-8 py-3.5 text-base">{t("View all services →")}</Link>
         </div>
       </section>

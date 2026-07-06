@@ -46,6 +46,7 @@ export const AR: Record<string, string> = {
   "Visit us": "زورينا",
   "Hours & Contact": "الأوقات والتواصل",
   "Opening hours": "أوقات العمل",
+  "Today": "اليوم",
   "WhatsApp us": "راسلينا على واتساب",
   "Ready to glow?": "جاهزة للتألّق؟",
   "Book your appointment online in under a minute.": "احجزي موعدك عبر الإنترنت في أقل من دقيقة.",

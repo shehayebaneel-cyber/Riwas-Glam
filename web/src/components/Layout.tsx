@@ -34,7 +34,7 @@ function NavItem({ to, label, hash = false }: { to: string; label: string; hash?
 
 function Nav() {
   const { customer } = useCustomer();
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -43,6 +43,16 @@ function Nav() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+  // Lock body scroll while the mobile menu is open; close it on Escape.
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const wa = `https://wa.me/${SITE.whatsapp}`;
+  const todayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const menuLinks = [...NAV_LINKS.map((l) => ({ to: l.to, label: t(l.key), hash: false })), { to: "/#about", label: t("About"), hash: true }, { to: "/#contact", label: t("Contact"), hash: true }];
   return (
     <header className={`sticky top-0 z-40 transition-all duration-300 ${scrolled ? "border-b border-border/60 bg-surface/75 shadow-[0_14px_40px_-24px_rgba(176,104,127,0.6)] backdrop-blur-xl" : "border-b border-transparent bg-surface/85 backdrop-blur-md"}`}>
       <div className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 transition-all duration-300 sm:px-10 lg:px-14 ${scrolled ? "h-16 sm:h-20" : "h-[4.5rem] sm:h-24"}`}>
@@ -68,25 +78,63 @@ function Nav() {
             <span className="hidden xl:inline">{customer ? customer.name.split(" ")[0] : t("Log in")}</span>
           </Link>
           <Link to="/book" className="btn btn-primary hidden whitespace-nowrap rounded-full px-8 py-3 text-[15px] shadow-[0_10px_26px_-10px_rgba(217,124,154,0.65)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_18px_38px_-12px_rgba(217,124,154,0.75)] sm:inline-flex">{t("Book Now")}</Link>
-          <button onClick={() => setOpen((o) => !o)} className="flex h-11 w-11 items-center justify-center rounded-full text-2xl text-ink transition hover:bg-surface-2 xl:hidden" aria-label="Menu">{open ? "✕" : "☰"}</button>
+          <a href={`tel:${SITE.phone}`} className="flex h-11 w-11 items-center justify-center rounded-full text-brand transition active:scale-95 hover:bg-surface-2 xl:hidden" aria-label={t("Call")}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+          </a>
+          <button onClick={() => setOpen((o) => !o)} className="flex h-11 w-11 items-center justify-center rounded-full text-2xl text-ink transition active:scale-95 hover:bg-surface-2 xl:hidden" aria-label="Menu">☰</button>
         </div>
       </div>
 
-      {/* Mobile / tablet menu */}
-      {open && (
-        <div className="border-t border-border bg-surface xl:hidden">
-          <nav className="mx-auto max-w-7xl space-y-0.5 px-5 py-3">
-            {NAV_LINKS.map((l) => <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="block rounded-xl px-3 py-3 text-[15px] font-semibold text-ink hover:bg-surface-2">{t(l.key)}</Link>)}
-            <a href="/#about" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-3 text-[15px] font-semibold text-ink hover:bg-surface-2">{t("About")}</a>
-            <a href="/#contact" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-3 text-[15px] font-semibold text-ink hover:bg-surface-2">{t("Contact")}</a>
-            <div className="flex items-center gap-3 pt-2">
-              <Link to="/account" onClick={() => setOpen(false)} className="flex-1 rounded-full bg-surface-2 px-4 py-3 text-center text-[15px] font-semibold text-brand">{customer ? customer.name.split(" ")[0] : t("Log in")}</Link>
-              <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="rounded-full border border-border/70 px-4 py-3 text-[13px] font-semibold uppercase tracking-wide text-ink/60" aria-label="Switch language">{lang === "ar" ? "EN" : "عربي"}</button>
+      {/* Mobile / tablet menu — full-height slide-in panel */}
+      <div className={`fixed inset-0 z-50 xl:hidden ${open ? "" : "pointer-events-none"}`} aria-hidden={!open}>
+        <div onClick={() => setOpen(false)} className={`absolute inset-0 bg-ink/40 backdrop-blur-sm transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`} />
+        <div className={`absolute right-0 top-0 flex h-full w-[87%] max-w-sm flex-col bg-surface shadow-[0_0_70px_-8px_rgba(74,51,48,0.55)] transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}>
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <span className="font-display text-xl font-extrabold tracking-tight text-ink">Riwa's <span className="italic text-accent">Glam</span></span>
+            <button onClick={() => setOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-xl text-ink transition active:scale-90" aria-label="Close menu">✕</button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+            <nav className="space-y-1">
+              {menuLinks.map((l) => {
+                const cls = "flex items-center justify-between rounded-2xl px-4 py-3.5 text-lg font-semibold text-ink transition active:scale-[0.98] active:bg-surface-2";
+                const arrow = <span className="text-brand/45">›</span>;
+                return l.hash
+                  ? <a key={l.to} href={l.to} onClick={() => setOpen(false)} className={cls}>{l.label}{arrow}</a>
+                  : <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className={cls}>{l.label}{arrow}</Link>;
+              })}
+              <Link to="/account" onClick={() => setOpen(false)} className="flex items-center justify-between rounded-2xl px-4 py-3.5 text-lg font-semibold text-brand transition active:scale-[0.98] active:bg-surface-2">{customer ? customer.name.split(" ")[0] : t("Log in")}<span className="text-brand/45">›</span></Link>
+            </nav>
+
+            <div className="mt-6 grid grid-cols-2 gap-2.5">
+              <a href={`tel:${SITE.phone}`} className="flex items-center justify-center gap-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.97]">📞 {t("Call")}</a>
+              <a href={wa} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.97]">💬 WhatsApp</a>
             </div>
-            <Link to="/book" onClick={() => setOpen(false)} className="btn btn-primary mt-1 block rounded-full px-4 py-3.5 text-center text-[15px] font-semibold shadow-[0_10px_26px_-10px_rgba(217,124,154,0.65)]">{t("Book Now")}</Link>
-          </nav>
+            <a href={SITE.mapUrl} target="_blank" rel="noreferrer" className="mt-2.5 flex items-start gap-2.5 rounded-2xl bg-surface-2 px-4 py-3 text-sm font-semibold text-ink transition active:scale-[0.98]"><span>📍</span><span>{SITE.address}</span></a>
+
+            <div className="mt-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">{t("Opening hours")}</p>
+              <ul className="mt-2 space-y-0.5 text-[13px]">
+                {SITE.hours.map((h) => {
+                  const today = h.day === todayName;
+                  return (
+                    <li key={h.day} className={`flex justify-between rounded-lg px-2 py-1.5 ${today ? "bg-brand-soft/70" : ""}`}>
+                      <span className={today ? "font-semibold text-brand" : "text-muted"}>{h.day}{today ? ` · ${t("Today")}` : ""}</span>
+                      <span className={h.value === "Closed" ? "text-muted" : today ? "font-semibold text-ink" : "text-ink/80"}>{h.value}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <a href={`https://instagram.com/${SITE.instagram}`} target="_blank" rel="noreferrer" className="mt-6 flex h-12 items-center justify-center gap-2 rounded-2xl border border-border text-sm font-semibold text-ink transition active:scale-[0.98]">📷 @{SITE.instagram}</a>
+          </div>
+
+          <div className="border-t border-border bg-surface px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4">
+            <Link to="/book" onClick={() => setOpen(false)} className="btn btn-primary w-full py-4 text-base">{t("Book Appointment")}</Link>
+          </div>
         </div>
-      )}
+      </div>
     </header>
   );
 }
