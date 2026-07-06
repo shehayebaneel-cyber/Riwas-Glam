@@ -45,23 +45,23 @@ function Nav() {
   }, []);
   return (
     <header className={`sticky top-0 z-40 transition-all duration-300 ${scrolled ? "border-b border-border/60 bg-surface/75 shadow-[0_14px_40px_-24px_rgba(176,104,127,0.6)] backdrop-blur-xl" : "border-b border-transparent bg-surface/85 backdrop-blur-md"}`}>
-      <div className={`mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-5 transition-all duration-300 sm:px-8 ${scrolled ? "h-16 sm:h-20" : "h-[4.5rem] sm:h-24"}`}>
+      <div className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 transition-all duration-300 sm:px-10 lg:px-14 ${scrolled ? "h-16 sm:h-20" : "h-[4.5rem] sm:h-24"}`}>
         {/* Logo */}
-        <Link to="/" className="flex shrink-0 items-center pe-3 ps-1" aria-label={SITE.name}>
+        <Link to="/" className="col-start-1 flex shrink-0 items-center justify-self-start" aria-label={SITE.name}>
           {SITE.logo
             ? <img src={SITE.logo} alt={SITE.name} className={`w-auto max-w-none drop-shadow-[0_1px_2px_rgba(74,51,48,0.28)] transition-all duration-300 ${scrolled ? "h-10 sm:h-16" : "h-12 sm:h-20"}`} />
             : <span className={`whitespace-nowrap font-display font-extrabold tracking-tight text-ink transition-all duration-300 ${scrolled ? "text-2xl sm:text-[1.7rem]" : "text-[1.65rem] sm:text-[2.1rem]"}`}>Riwa's <span className="italic text-accent">Glam</span></span>}
         </Link>
 
         {/* Centered nav */}
-        <nav className="hidden items-center justify-center gap-9 2xl:gap-12 xl:flex">
+        <nav className="col-start-2 hidden items-center justify-center gap-9 justify-self-center 2xl:gap-12 xl:flex">
           {NAV_LINKS.map((l) => <NavItem key={l.to} to={l.to} label={t(l.key)} />)}
           <NavItem to="/#about" label={t("About")} hash />
           <NavItem to="/#contact" label={t("Contact")} hash />
         </nav>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-2.5 sm:gap-3.5">
+        <div className="col-start-3 flex items-center justify-end gap-2.5 justify-self-end sm:gap-3.5">
           <LangToggle />
           <Link to="/account" className="hidden items-center gap-2.5 rounded-full py-1.5 pe-3 ps-1.5 text-sm font-semibold text-ink/80 transition-all duration-300 hover:bg-surface-2 hover:text-brand sm:flex" aria-label={t("Log in")}>
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-sm ring-1 ring-border/60">{customer ? customer.name.slice(0, 1).toUpperCase() : "👤"}</span>
