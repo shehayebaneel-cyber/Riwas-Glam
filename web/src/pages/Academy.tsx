@@ -4,14 +4,22 @@ import { Reveal } from "../components/Reveal";
 import { SITE } from "../config";
 import { api, priceLabel } from "../lib/api";
 import { useI18n } from "../context/I18n";
+import { useCustomer } from "../context/CustomerAuth";
 
 type Course = { id: number; title: string; image: string; description: string; duration: string; price: number; includes: string[] };
 
 export function Academy() {
   const { t } = useI18n();
+  const { customer, authHeader } = useCustomer();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState<Set<number>>(new Set());
   useEffect(() => { api.get<Course[]>("/api/courses").then(setCourses).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { if (customer) api.get<{ COURSE: number[] }>("/api/customer/me/wishlist", authHeader).then((w) => setSaved(new Set(w.COURSE))).catch(() => {}); /* eslint-disable-next-line */ }, [customer]);
+  function toggleSave(id: number) {
+    const on = saved.has(id); const n = new Set(saved); on ? n.delete(id) : n.add(id); setSaved(n);
+    (on ? api.delete(`/api/customer/me/wishlist/COURSE/${id}`, authHeader) : api.post("/api/customer/me/wishlist", { kind: "COURSE", itemId: id }, authHeader)).catch(() => {});
+  }
   const wa = (msg: string) => `https://wa.me/${SITE.whatsapp}?text=${encodeURIComponent(msg)}`;
 
   return (
@@ -37,6 +45,7 @@ export function Academy() {
                   <p className="font-display text-xl font-extrabold text-brand">{priceLabel(c.price)}</p>
                   <p className="text-xs text-muted">{c.duration}</p>
                 </div>
+                {customer && <button onClick={() => toggleSave(c.id)} aria-label="Save to wishlist" className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg shadow transition active:scale-90 ${saved.has(c.id) ? "text-brand" : "text-muted hover:text-brand"}`}>{saved.has(c.id) ? "♥" : "♡"}</button>}
               </div>
               <div>
                 <p className="eyebrow">{t("Course")}</p>

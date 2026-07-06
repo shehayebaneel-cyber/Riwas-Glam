@@ -270,6 +270,17 @@ model Setting {
   value String @default("")
 }
 
+// A customer's saved package or course (service favourites use Customer.favorites).
+model Favorite {
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  kind       String // PACKAGE | COURSE
+  itemId     Int
+  createdAt  DateTime @default(now())
+  @@unique([customerId, kind, itemId])
+  @@index([customerId])
+}
+
 // Audit trail — who did what in the admin, when, and from where.
 model ActivityLog {
   id        Int      @id @default(autoincrement())

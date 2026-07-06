@@ -4,14 +4,22 @@ import { Layout } from "../components/Layout";
 import { Reveal } from "../components/Reveal";
 import { api, durationLabel, priceLabel } from "../lib/api";
 import { useI18n } from "../context/I18n";
+import { useCustomer } from "../context/CustomerAuth";
 
 type Pkg = { id: number; title: string; image: string; description: string; price: number; durationMin: number; services: string[] };
 
 export function Packages() {
   const { t } = useI18n();
+  const { customer, authHeader } = useCustomer();
   const [items, setItems] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState<Set<number>>(new Set());
   useEffect(() => { api.get<Pkg[]>("/api/packages").then(setItems).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { if (customer) api.get<{ PACKAGE: number[] }>("/api/customer/me/wishlist", authHeader).then((w) => setSaved(new Set(w.PACKAGE))).catch(() => {}); /* eslint-disable-next-line */ }, [customer]);
+  function toggleSave(id: number) {
+    const on = saved.has(id); const n = new Set(saved); on ? n.delete(id) : n.add(id); setSaved(n);
+    (on ? api.delete(`/api/customer/me/wishlist/PACKAGE/${id}`, authHeader) : api.post("/api/customer/me/wishlist", { kind: "PACKAGE", itemId: id }, authHeader)).catch(() => {});
+  }
 
   return (
     <Layout>
@@ -31,6 +39,7 @@ export function Packages() {
                 <div className="relative aspect-[4/3] overflow-hidden bg-brand-soft">
                   {p.image ? <img src={p.image} alt={p.title} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-5xl">🎀</div>}
                   <span className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 font-display font-bold text-brand shadow">{priceLabel(p.price)}</span>
+                  {customer && <button onClick={() => toggleSave(p.id)} aria-label="Save to wishlist" className={`absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg shadow transition active:scale-90 ${saved.has(p.id) ? "text-brand" : "text-muted hover:text-brand"}`}>{saved.has(p.id) ? "♥" : "♡"}</button>}
                 </div>
                 <div className="flex flex-1 flex-col p-5">
                   <h2 className="font-display text-xl font-bold text-ink">{p.title}</h2>

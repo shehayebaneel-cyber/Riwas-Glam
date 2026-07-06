@@ -1648,6 +1648,21 @@ app.delete("/api/customer/me/favorites/:serviceId", requireCustomer, async (req,
   await prisma.customer.update({ where: { id: custOf(req) }, data: { favorites: { disconnect: { id: Number(req.params.serviceId) } } } }).catch(() => {});
   res.json({ ok: true });
 });
+// Wishlist for packages & courses (cross-device, per account).
+app.get("/api/customer/me/wishlist", requireCustomer, async (req, res) => {
+  const favs = await prisma.favorite.findMany({ where: { customerId: custOf(req) } });
+  res.json({ PACKAGE: favs.filter((f) => f.kind === "PACKAGE").map((f) => f.itemId), COURSE: favs.filter((f) => f.kind === "COURSE").map((f) => f.itemId) });
+});
+app.post("/api/customer/me/wishlist", requireCustomer, async (req, res) => {
+  const kind = STR(req.body?.kind, 12).toUpperCase(), itemId = Number(req.body?.itemId);
+  if (!["PACKAGE", "COURSE"].includes(kind) || !itemId) return res.status(400).json({ error: "Invalid item." });
+  await prisma.favorite.upsert({ where: { customerId_kind_itemId: { customerId: custOf(req), kind, itemId } }, create: { customerId: custOf(req), kind, itemId }, update: {} }).catch(() => {});
+  res.json({ ok: true });
+});
+app.delete("/api/customer/me/wishlist/:kind/:itemId", requireCustomer, async (req, res) => {
+  await prisma.favorite.deleteMany({ where: { customerId: custOf(req), kind: STR(req.params.kind, 12).toUpperCase(), itemId: Number(req.params.itemId) } }).catch(() => {});
+  res.json({ ok: true });
+});
 app.post("/api/customer/me/reviews", requireCustomer, async (req, res) => {
   const c = await prisma.customer.findUnique({ where: { id: custOf(req) } });
   const rating = Math.max(1, Math.min(5, Math.round(NUM(req.body?.rating, 5))));
