@@ -270,6 +270,19 @@ model Setting {
   value String @default("")
 }
 
+// End-of-day physical cash reconciliation (one per date).
+model CashDrawer {
+  id             Int       @id @default(autoincrement())
+  date           String    @unique // YYYY-MM-DD
+  openingBalance Float     @default(0)
+  cashExpenses   Float     @default(0) // cash paid out of the drawer
+  refunds        Float     @default(0)
+  actualCash     Float     @default(0) // counted at close
+  note           String    @default("")
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+}
+
 // A customer's saved package or course (service favourites use Customer.favorites).
 model Favorite {
   id         Int      @id @default(autoincrement())

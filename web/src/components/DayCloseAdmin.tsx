@@ -12,11 +12,20 @@ type Report = {
   staffCommissions: { name: string; amount: number }[];
 };
 
+type Drawer = { date: string; openingBalance: number; cashExpenses: number; refunds: number; actualCash: number; note: string; closedAt: string | null; cashSales: number; expectedCash: number; difference: number };
+
 export function DayCloseAdmin({ adminKey }: { adminKey: string }) {
   const H = { "x-admin-key": adminKey };
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [r, setR] = useState<Report | null>(null);
-  useEffect(() => { setR(null); api.get<Report>(`/api/admin/reports/daily-closing?date=${date}`, H).then(setR).catch(() => {}); /* eslint-disable-next-line */ }, [date]);
+  const [dw, setDw] = useState<Drawer | null>(null);
+  const [savedDw, setSavedDw] = useState(false);
+  useEffect(() => { setR(null); setDw(null); api.get<Report>(`/api/admin/reports/daily-closing?date=${date}`, H).then(setR).catch(() => {}); api.get<Drawer>(`/api/admin/cash-drawer?date=${date}`, H).then(setDw).catch(() => {}); /* eslint-disable-next-line */ }, [date]);
+  async function saveDrawer(close = false) {
+    if (!dw) return;
+    const next = await api.post<Drawer>("/api/admin/cash-drawer", { ...dw, date, close: close || !!dw.closedAt }, H).catch(() => null);
+    if (next) { setDw(next); setSavedDw(true); setTimeout(() => setSavedDw(false), 1500); }
+  }
 
   function downloadCSV() {
     if (!r) return;
@@ -84,10 +93,39 @@ export function DayCloseAdmin({ adminKey }: { adminKey: string }) {
           )}
         </div>
       )}
+
+      {dw && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-display text-lg font-bold text-ink">Cash drawer</p>
+            {dw.closedAt && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600">Closed</span>}
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <NumField label="Opening balance" value={dw.openingBalance} onChange={(v) => setDw({ ...dw, openingBalance: v })} />
+            <NumField label="Cash expenses / paid out" value={dw.cashExpenses} onChange={(v) => setDw({ ...dw, cashExpenses: v })} />
+            <NumField label="Refunds" value={dw.refunds} onChange={(v) => setDw({ ...dw, refunds: v })} />
+            <NumField label="Actual cash counted" value={dw.actualCash} onChange={(v) => setDw({ ...dw, actualCash: v })} />
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <Big label="Cash sales" value={money(dw.cashSales)} />
+            <Big label="Expected" value={money(dw.expectedCash)} />
+            <Big label="Difference" value={money(dw.difference)} tone={dw.difference === 0 ? "text-ink" : dw.difference > 0 ? "text-emerald-600" : "text-red-500"} />
+          </div>
+          <p className="mt-2 text-xs text-muted">Expected = opening + cash sales − cash expenses − refunds. Cash sales come from paid cash payments.</p>
+          <input value={dw.note} onChange={(e) => setDw({ ...dw, note: e.target.value })} placeholder="Note (optional)" className="input mt-2 !py-2 text-sm" />
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => saveDrawer(false)} className="btn btn-ghost px-4 py-2 text-sm">Save {savedDw && "✓"}</button>
+            {!dw.closedAt && <button onClick={() => saveDrawer(true)} className="btn btn-primary px-4 py-2 text-sm">Close drawer</button>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+function NumField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return <label className="text-sm font-semibold text-ink">{label}<input type="number" step="0.01" value={value} onChange={(e) => onChange(Number(e.target.value))} className="input mt-1 !py-2 text-sm" /></label>;
+}
 function Big({ label, value, tone = "text-ink" }: { label: string; value: string; tone?: string }) {
   return <div className="rounded-xl bg-surface-2 p-3 text-center"><p className="text-xs text-muted">{label}</p><p className={`font-display text-lg font-extrabold ${tone}`}>{value}</p></div>;
 }

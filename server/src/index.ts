@@ -435,6 +435,30 @@ app.get("/api/admin/reports/daily-closing", requireAdmin, async (req, res) => {
   });
 });
 
+// Cash drawer — reconcile physical cash for a day. cashSales is derived from the
+// paid CASH payments; the rest (opening, expenses, refunds, counted) is entered.
+async function cashSalesFor(date: string) {
+  const payments = await prisma.payment.findMany({ where: { status: "PAID", method: "CASH", paidAt: { gte: new Date(date + "T00:00:00"), lte: new Date(date + "T23:59:59.999") } }, select: { amount: true } });
+  return round2(payments.reduce((s, p) => s + p.amount, 0));
+}
+function drawerView(d: { openingBalance: number; cashExpenses: number; refunds: number; actualCash: number }, cashSales: number) {
+  const expectedCash = round2(d.openingBalance + cashSales - d.cashExpenses - d.refunds);
+  return { cashSales, expectedCash, difference: round2(d.actualCash - expectedCash) };
+}
+app.get("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
+  const date = STR((req.query as Record<string, string>).date, 10) || new Date().toLocaleDateString("en-CA");
+  if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
+  const d = (await prisma.cashDrawer.findUnique({ where: { date } })) ?? { date, openingBalance: 0, cashExpenses: 0, refunds: 0, actualCash: 0, note: "", closedAt: null };
+  res.json({ ...d, ...drawerView(d, await cashSalesFor(date)) });
+});
+app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const date = STR(b.date, 10);
+  if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
+  const data = { openingBalance: round2(NUM(b.openingBalance, 0)), cashExpenses: round2(NUM(b.cashExpenses, 0)), refunds: round2(NUM(b.refunds, 0)), actualCash: round2(NUM(b.actualCash, 0)), note: STR(b.note, 300), closedAt: b.close ? new Date() : null };
+  const d = await prisma.cashDrawer.upsert({ where: { date }, create: { date, ...data }, update: data });
+  res.json({ ...d, ...drawerView(d, await cashSalesFor(date)) });
+});
+
 // Admin audit trail (owner/managers with the "activity" permission).
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
