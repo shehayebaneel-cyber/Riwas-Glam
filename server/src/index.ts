@@ -345,6 +345,7 @@ const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", 
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me") || p.endsWith("/alerts") || p.endsWith("/search")) return ""; // any authenticated principal
+  if (p.includes("/analytics/customers")) return "bookings"; // customer insights live on the Customers tab
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
@@ -484,6 +485,38 @@ app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
 // Admin audit trail (owner/managers with the "activity" permission).
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+});
+
+// Customer analytics: lifetime value, repeat rate, retention, acquisition, top spenders.
+app.get("/api/admin/analytics/customers", requireAdmin, async (_req, res) => {
+  const customers = await prisma.customer.findMany({ include: { appointments: { select: { price: true, status: true, date: true } } } });
+  const now = Date.now();
+  let repeat = 0, withVisit = 0, totalSpent = 0, active90 = 0;
+  const clv: { name: string; spent: number; visits: number }[] = [];
+  const acq: Record<string, number> = {};
+  for (const c of customers) {
+    const done = c.appointments.filter((a) => a.status === "COMPLETED");
+    const spent = round2(done.reduce((s, a) => s + a.price, 0));
+    totalSpent += spent;
+    if (done.length >= 1) withVisit++;
+    if (done.length >= 2) repeat++;
+    const lastVisit = done.map((a) => a.date).sort().pop();
+    if (lastVisit && now - new Date(lastVisit + "T00:00:00").getTime() <= 90 * 86400000) active90++;
+    clv.push({ name: c.name, spent, visits: done.length });
+    const m = (c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)).toISOString().slice(0, 7);
+    acq[m] = (acq[m] ?? 0) + 1;
+  }
+  const total = customers.length;
+  clv.sort((a, b) => b.spent - a.spent);
+  res.json({
+    totalCustomers: total,
+    repeatCustomers: repeat,
+    repeatRate: withVisit ? Math.round((repeat / withVisit) * 100) : 0,
+    avgLifetimeValue: total ? round2(totalSpent / total) : 0,
+    active90, retentionRate: withVisit ? Math.round((active90 / withVisit) * 100) : 0,
+    topCustomers: clv.filter((c) => c.spent > 0).slice(0, 8),
+    acquisition: Object.entries(acq).sort().slice(-6).map(([month, count]) => ({ month, count })),
+  });
 });
 
 // Global search across the whole system (customers, bookings, gift cards, …).

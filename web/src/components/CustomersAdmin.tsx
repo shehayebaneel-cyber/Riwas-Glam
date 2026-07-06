@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { ImageUpload } from "./ImageUpload";
+import { CustomerInsights } from "./CustomerInsights";
 
 type ListItem = { id: number; name: string; email: string; phone: string; birthday: string; tags: string[]; visits: number; spent: number; lastVisit: string };
 type Profile = {
@@ -29,6 +30,7 @@ export function CustomersAdmin({ adminKey }: { adminKey: string }) {
 
   return (
     <div className="space-y-3">
+      <CustomerInsights adminKey={adminKey} />
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, phone or email…" className="input" />
       {allTags.length > 0 && (
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
