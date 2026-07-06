@@ -34,6 +34,7 @@ async function getSetting<T>(key: string, def: T): Promise<T> {
 }
 const setSetting = (key: string, value: unknown) => prisma.setting.upsert({ where: { key }, create: { key, value: JSON.stringify(value) }, update: { value: JSON.stringify(value) } });
 const GC_DEFAULT = { amounts: [25, 50, 100], min: 10, max: 500, expiryMonths: 12 };
+const EMERGENCY_DEFAULT = { closed: false, message: "" };
 type Tier = { name: string; minPoints: number; discountPct: number };
 type Reward = { id: number; name: string; cost: number; description: string };
 const LOYALTY_DEFAULT = {
@@ -108,6 +109,8 @@ async function releaseStaleWhishHolds() {
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, salon: SALON.name }));
 app.get("/api/info", (_req, res) => res.json({ name: SALON.name, hours: SALON.hours, slotStepMin: SALON.slotStepMin }));
+// Public salon status — drives the site-wide banner + booking block during a temporary close.
+app.get("/api/status", async (_req, res) => { const e = await getSetting("emergencyClose", EMERGENCY_DEFAULT); res.json({ closed: !!e.closed, message: STR(e.message, 300) }); });
 app.get("/api/staff", async (_req, res) => {
   const staff = await prisma.staff.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, role: true, avatar: true } });
   res.json(staff);
@@ -152,6 +155,8 @@ app.get("/api/availability", async (req, res) => {
   await releaseStaleWhishHolds();
   const q = req.query as Record<string, string>;
   const date = STR(q.date, 10);
+  const emg = await getSetting("emergencyClose", EMERGENCY_DEFAULT);
+  if (emg.closed) return res.json({ date, durationMin: 0, price: 0, slots: [], closed: true, message: STR(emg.message, 300) });
   const staffId = q.staffId ? Number(q.staffId) : null;
   const addOnIds = STR(q.addOns).split(",").map(Number).filter((n) => n > 0);
   if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
@@ -174,6 +179,8 @@ app.post("/api/appointments", async (req, res) => {
   if (!name || !phone) return res.status(400).json({ error: "Your name and phone are required." });
   if (!isDate(date) || !isTime(time)) return res.status(400).json({ error: "Please pick a valid date and time." });
   if (!isPaymentMethod(method)) return res.status(400).json({ error: "Please choose a valid payment method." });
+  const emg = await getSetting("emergencyClose", EMERGENCY_DEFAULT);
+  if (emg.closed) return res.status(423).json({ error: emg.message || "Online booking is temporarily paused — please contact us to book." });
   const isPkg = !!b.packageId;
   const pr = isPkg ? await resolvePackage(Number(b.packageId)) : null;
   const sr = isPkg ? null : await resolveBooking(Number(b.serviceId), addOnIds);
@@ -323,7 +330,7 @@ function permForPath(p: string): string {
   if (p.includes("/promos")) return "marketing";
   if (p.includes("/notifications")) return "notifications";
   if (p.includes("/branches")) return "branches";
-  if (p.includes("/site-content") || p.includes("/admin/images") || p.includes("/gallery")) return "website";
+  if (p.includes("/site-content") || p.includes("/admin/images") || p.includes("/gallery") || p.includes("/emergency")) return "website";
   if (p.includes("/staff")) return "team";
   if (p.includes("/gift-cards") || p.includes("/settings/giftcard")) return "giftcards";
   if (p.includes("/reviews")) return "reviews";
@@ -358,6 +365,14 @@ app.get("/api/admin/me", requireAdmin, async (req, res) => {
   if (pr.perms === "*") return res.json({ role: "OWNER", name: "Owner", permissions: ALL_PERMS });
   const st = pr.staffId ? await prisma.staff.findUnique({ where: { id: pr.staffId } }) : null;
   res.json({ role: st?.accessRole ?? "STAFF", name: st?.name ?? "Staff", permissions: pr.perms });
+});
+
+// Emergency close — pause online booking + show a site-wide notice.
+app.get("/api/admin/settings/emergency", requireAdmin, async (_req, res) => res.json(await getSetting("emergencyClose", EMERGENCY_DEFAULT)));
+app.post("/api/admin/settings/emergency", requireAdmin, async (req, res) => {
+  const closed = !!req.body?.closed, message = STR(req.body?.message, 300);
+  await setSetting("emergencyClose", { closed, message });
+  res.json({ closed, message });
 });
 
 // Unified alert center — everything that needs the owner's attention, in one place.

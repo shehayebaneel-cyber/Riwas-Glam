@@ -25,6 +25,7 @@ import { BranchesAdmin } from "../components/BranchesAdmin";
 import { NewBookingModal } from "../components/NewBookingModal";
 import { PaymentsAdmin } from "../components/PaymentsAdmin";
 import { AlertsBell } from "../components/AlertsBell";
+import { EmergencyControl } from "../components/EmergencyControl";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -130,6 +131,8 @@ export function Admin() {
           <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{label}</button>
         ))}
       </div>
+
+      {perms.includes("website") && <div className="mt-4"><EmergencyControl adminKey={key} /></div>}
 
       {tab === "home" && <div className="mt-5"><DashboardHome adminKey={key} go={setTab as (t: string) => void} /></div>}
       {tab === "services" && <div className="mt-5"><CatalogAdmin adminKey={key} /></div>}

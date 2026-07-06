@@ -30,14 +30,17 @@ export default function App() {
   // re-render so every page shows the manager's latest edits. Falls back to the
   // built-in defaults in config.ts if the request fails or is still loading.
   const [, bump] = useState(0);
+  const [status, setStatus] = useState<{ closed: boolean; message: string } | null>(null);
   useEffect(() => {
     api.get<Partial<typeof SITE>>("/api/site-content")
       .then((c) => { Object.assign(SITE, c); bump((v) => v + 1); })
       .catch(() => {});
+    api.get<{ closed: boolean; message: string }>("/api/status").then(setStatus).catch(() => {});
   }, []);
 
   return (
     <>
+      {status?.closed && <div className="bg-brand-dark px-4 py-2 text-center text-sm font-semibold text-white">{status.message || "We're temporarily closed for online bookings — please contact us. 💗"}</div>}
       <Suspense fallback={<div className="p-16 text-center text-muted">Loading…</div>}>
         <Routes>
           <Route path="/" element={<Home />} />
