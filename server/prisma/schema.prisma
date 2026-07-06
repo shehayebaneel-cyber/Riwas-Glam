@@ -270,6 +270,18 @@ model Setting {
   value String @default("")
 }
 
+// Audit trail — who did what in the admin, when, and from where.
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  actor     String   @default("") // display name (Owner or staff name)
+  staffId   Int? // null = owner master key
+  action    String   @default("") // human-readable summary
+  detail    String   @default("") // raw method + path
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
 // An image uploaded by the manager (hero, category, gallery, avatars…). Stored
 // as bytes so no external file host is needed. Served at GET /api/images/:id.
 model Image {

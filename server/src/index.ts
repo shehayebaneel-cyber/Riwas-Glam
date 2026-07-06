@@ -319,7 +319,7 @@ app.post("/api/webhooks/whish", async (req, res) => {
 // ---- Admin ----
 const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 // Admin sections (permission keys). Owner has all; other roles get a subset.
-const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "branches", "website", "giftcards", "reviews", "reports"];
+const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "branches", "website", "giftcards", "reviews", "reports", "activity"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me") || p.endsWith("/alerts")) return ""; // any authenticated principal
@@ -339,24 +339,58 @@ function permForPath(p: string): string {
   if (p.includes("/waitlist")) return "waitlist";
   if (p.includes("/categories") || p.includes("/services") || p.includes("/addons") || p.includes("/catalog") || p.includes("/reorder")) return "services";
   if (p.includes("/appointments") || p.includes("/commissions") || p.includes("/customers") || p.includes("/payments")) return "bookings";
+  if (p.includes("/activity")) return "activity";
   return "settings"; // owner-only fallback (only the master key / OWNER passes)
+}
+// Turn a mutating request into a human-readable audit line.
+function describeAction(method: string, path: string): string {
+  const seg = path.replace("/api/admin/", "");
+  const verb = method === "POST" ? "Created" : method === "DELETE" ? "Deleted" : "Updated";
+  if (/emergency/.test(seg)) return "Toggled emergency close";
+  if (/gift-cards/.test(seg)) return `${verb} a gift card`;
+  if (/services/.test(seg)) return `${verb} a service`;
+  if (/categories/.test(seg)) return `${verb} a category`;
+  if (/addons/.test(seg)) return `${verb} an add-on`;
+  if (/appointments/.test(seg)) return method === "POST" ? "Created a booking" : "Updated a booking";
+  if (/payments/.test(seg)) return "Updated a payment";
+  if (/products|inventory|stock|recipe|movements/.test(seg)) return `${verb} inventory`;
+  if (/reviews/.test(seg)) return "Moderated a review";
+  if (/staff/.test(seg)) return `${verb} a staff member`;
+  if (/payouts/.test(seg)) return `${verb} a payout`;
+  if (/customers/.test(seg)) return "Updated a customer";
+  if (/promos/.test(seg)) return `${verb} a promo`;
+  if (/courses/.test(seg)) return `${verb} a course`;
+  if (/packages/.test(seg)) return `${verb} a package`;
+  if (/branches/.test(seg)) return `${verb} a branch`;
+  if (/waitlist/.test(seg)) return "Updated the waitlist";
+  if (/gallery/.test(seg)) return `${verb} a gallery item`;
+  if (/site-content|settings/.test(seg)) return "Updated settings";
+  return `${verb}: ${seg}`;
+}
+function logActivity(data: { actor: string; staffId: number | null; action: string; detail: string; ip: string }) {
+  prisma.activityLog.create({ data: { actor: STR(data.actor, 80), staffId: data.staffId, action: STR(data.action, 160), detail: STR(data.detail, 300), ip: STR(data.ip, 60) } }).catch(() => {});
 }
 // Resolves the caller (master admin key OR a staff token) and enforces the path's permission.
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const key = String(req.headers["x-admin-key"] ?? "");
-  let perms: string[] | "*" | null = null, staffId: number | null = null;
+  let perms: string[] | "*" | null = null, staffId: number | null = null, actorName = "Owner";
   if (key === ADMIN_KEY) perms = "*";
   else {
     const sid = verifyStaff(key);
     if (sid) {
       const st = await prisma.staff.findUnique({ where: { id: sid } }).catch(() => null);
-      if (st && st.isActive) { staffId = sid; perms = st.accessRole === "OWNER" ? "*" : (parseArr(st.permissions) as string[]); }
+      if (st && st.isActive) { staffId = sid; actorName = st.name; perms = st.accessRole === "OWNER" ? "*" : (parseArr(st.permissions) as string[]); }
     }
   }
   if (!perms) return res.status(401).json({ error: "Unauthorized" });
   const need = permForPath(req.path);
   if (need && perms !== "*" && !perms.includes(need)) return res.status(403).json({ error: "You don't have access to this section." });
   (req as Request & { principal?: unknown }).principal = { perms, staffId };
+  // Audit trail: record successful admin mutations (not logins or reads).
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(req.method) && !req.path.endsWith("/login") && !req.path.includes("/activity")) {
+    const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
+    res.on("finish", () => { if (res.statusCode < 400) logActivity({ actor: actorName, staffId, action: describeAction(req.method, req.path), detail: `${req.method} ${req.path}`, ip }); });
+  }
   next();
 }
 app.post("/api/admin/login", (req, res) => { if (STR(req.body?.key) === ADMIN_KEY) return res.json({ ok: true }); res.status(401).json({ error: "Wrong password." }); });
@@ -365,6 +399,11 @@ app.get("/api/admin/me", requireAdmin, async (req, res) => {
   if (pr.perms === "*") return res.json({ role: "OWNER", name: "Owner", permissions: ALL_PERMS });
   const st = pr.staffId ? await prisma.staff.findUnique({ where: { id: pr.staffId } }) : null;
   res.json({ role: st?.accessRole ?? "STAFF", name: st?.name ?? "Staff", permissions: pr.perms });
+});
+
+// Admin audit trail (owner/managers with the "activity" permission).
+app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
+  res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
 });
 
 // Emergency close — pause online booking + show a site-wide notice.
