@@ -147,7 +147,7 @@ app.post("/api/appointments", async (req, res) => {
       date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
       addOns: JSON.stringify(pr ? [] : sr!.addOns.map((a) => ({ name: a.name, price: a.price }))),
       price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
-      note: STR(b.note, 500), promoCode: promoUsed, status: "CONFIRMED",
+      note: STR(b.note, 500), promoCode: promoUsed, branchId: await defaultBranchId(), status: "CONFIRMED",
     },
   });
   notify("confirmation", { email: appointment.customerEmail || undefined, phone: appointment.customerPhone || undefined, data: { name: appointment.customerName, service: appointment.serviceName, date: appointment.date, time: appointment.time } });
@@ -189,7 +189,7 @@ app.get("/api/gift-cards/:code", async (req, res) => {
 // ---- Admin ----
 const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 // Admin sections (permission keys). Owner has all; other roles get a subset.
-const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "website", "giftcards", "reviews", "reports"];
+const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "branches", "website", "giftcards", "reviews", "reports"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me")) return ""; // any authenticated principal
@@ -199,6 +199,7 @@ function permForPath(p: string): string {
   if (p.includes("/settings/loyalty") || p.includes("/redemptions")) return "loyalty";
   if (p.includes("/promos")) return "marketing";
   if (p.includes("/notifications")) return "notifications";
+  if (p.includes("/branches")) return "branches";
   if (p.includes("/site-content") || p.includes("/admin/images") || p.includes("/gallery")) return "website";
   if (p.includes("/staff")) return "team";
   if (p.includes("/gift-cards") || p.includes("/settings/giftcard")) return "giftcards";
@@ -323,7 +324,7 @@ app.get("/api/admin/staff", requireAdmin, async (_req, res) => {
 app.post("/api/admin/staff", requireAdmin, async (req, res) => {
   const name = STR(req.body?.name, 60); if (!name) return res.status(400).json({ error: "Staff name is required." });
   const max = await prisma.staff.aggregate({ _max: { sortOrder: true } });
-  res.status(201).json(await prisma.staff.create({ data: { name, role: STR(req.body?.role, 60), commissionPct: Math.max(0, Math.min(100, NUM(req.body?.commissionPct, 0))), schedule: JSON.stringify(DEFAULT_SCHEDULE), blockedDates: "[]", sortOrder: (max._max.sortOrder ?? 0) + 1 } }));
+  res.status(201).json(await prisma.staff.create({ data: { name, role: STR(req.body?.role, 60), commissionPct: Math.max(0, Math.min(100, NUM(req.body?.commissionPct, 0))), schedule: JSON.stringify(DEFAULT_SCHEDULE), blockedDates: "[]", sortOrder: (max._max.sortOrder ?? 0) + 1, branchId: await defaultBranchId() } }));
 });
 app.patch("/api/admin/staff/:id", requireAdmin, async (req, res) => {
   const b = req.body ?? {}; const data: Record<string, unknown> = {};
@@ -898,6 +899,41 @@ app.patch("/api/admin/settings/loyalty", requireAdmin, async (req, res) => {
 });
 app.get("/api/admin/redemptions", requireAdmin, async (_req, res) => res.json(await prisma.rewardRedemption.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { customer: { select: { name: true, phone: true } } } })));
 app.patch("/api/admin/redemptions/:id", requireAdmin, async (req, res) => res.json(await prisma.rewardRedemption.update({ where: { id: String(req.params.id) }, data: { status: STR(req.body?.status, 10).toUpperCase() === "USED" ? "USED" : "ISSUED" } })));
+
+// ---- Branches (multi-location, future-proofing) ----
+let _defaultBranch: number | null = null;
+async function defaultBranchId(): Promise<number | null> {
+  if (_defaultBranch) return _defaultBranch;
+  const b = await prisma.branch.findFirst({ where: { isDefault: true } }).catch(() => null);
+  if (b) _defaultBranch = b.id;
+  return b?.id ?? null;
+}
+app.get("/api/branches", async (_req, res) => res.json(await prisma.branch.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] })));
+app.get("/api/admin/branches", requireAdmin, async (_req, res) => res.json(await prisma.branch.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] })));
+app.post("/api/admin/branches", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const name = STR(b.name, 80);
+  if (!name) return res.status(400).json({ error: "Branch name is required." });
+  const max = await prisma.branch.aggregate({ _max: { sortOrder: true } });
+  const count = await prisma.branch.count();
+  res.json(await prisma.branch.create({ data: { name, address: STR(b.address, 200), phone: STR(b.phone, 40), isDefault: count === 0, sortOrder: (max._max.sortOrder ?? 0) + 1 } }));
+});
+app.patch("/api/admin/branches/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const id = Number(req.params.id); const data: Record<string, unknown> = {};
+  if (b.name !== undefined) data.name = STR(b.name, 80);
+  if (b.address !== undefined) data.address = STR(b.address, 200);
+  if (b.phone !== undefined) data.phone = STR(b.phone, 40);
+  if (b.isActive !== undefined) data.isActive = !!b.isActive;
+  if (b.isDefault === true) await prisma.branch.updateMany({ data: { isDefault: false } }); // only one default
+  if (b.isDefault !== undefined) data.isDefault = !!b.isDefault;
+  res.json(await prisma.branch.update({ where: { id }, data }));
+});
+app.delete("/api/admin/branches/:id", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const br = await prisma.branch.findUnique({ where: { id } });
+  if (br?.isDefault) return res.status(400).json({ error: "Can't delete the default branch." });
+  await prisma.branch.delete({ where: { id } }).catch(() => {});
+  res.json({ ok: true });
+});
 
 // ---- Notifications ----
 const NOTIF_DEFAULT = {
