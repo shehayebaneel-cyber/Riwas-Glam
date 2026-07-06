@@ -28,6 +28,7 @@ import { AlertsBell } from "../components/AlertsBell";
 import { EmergencyControl } from "../components/EmergencyControl";
 import { ActivityAdmin } from "../components/ActivityAdmin";
 import { DayCloseAdmin } from "../components/DayCloseAdmin";
+import { GlobalSearch } from "../components/GlobalSearch";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -127,6 +128,8 @@ export function Admin() {
           <button onClick={logout} className="btn btn-ghost px-3 py-2 text-sm">Log out</button>
         </div>
       </div>
+
+      <div className="mt-4"><GlobalSearch adminKey={key} onGo={(t) => { if (perms.includes(TAB_PERM[t as Tab] ?? "zzz")) setTab(t as Tab); }} /></div>
 
       <div className="no-scrollbar mt-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
         {visible.map(([t, label]) => (

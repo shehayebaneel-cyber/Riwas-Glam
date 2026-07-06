@@ -344,7 +344,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "branches", "website", "giftcards", "reviews", "reports", "activity"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
-  if (p.endsWith("/admin/me") || p.endsWith("/alerts")) return ""; // any authenticated principal
+  if (p.endsWith("/admin/me") || p.endsWith("/alerts") || p.endsWith("/search")) return ""; // any authenticated principal
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements")) return "inventory";
@@ -484,6 +484,32 @@ app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
 // Admin audit trail (owner/managers with the "activity" permission).
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+});
+
+// Global search across the whole system (customers, bookings, gift cards, …).
+app.get("/api/admin/search", requireAdmin, async (req, res) => {
+  const q = STR((req.query as Record<string, string>).q, 60);
+  if (q.length < 2) return res.json({ results: [] });
+  const like = { contains: q, mode: "insensitive" as const };
+  const upper = q.toUpperCase();
+  const [customers, services, staff, packages, courses, giftcards, payments] = await Promise.all([
+    prisma.customer.findMany({ where: { OR: [{ name: like }, { phone: { contains: q } }, { email: like }] }, take: 6, select: { id: true, name: true, phone: true } }),
+    prisma.service.findMany({ where: { name: like }, take: 5, select: { id: true, name: true } }),
+    prisma.staff.findMany({ where: { name: like }, take: 5, select: { id: true, name: true, role: true } }),
+    prisma.package.findMany({ where: { title: like }, take: 5, select: { id: true, title: true } }),
+    prisma.course.findMany({ where: { title: like }, take: 5, select: { id: true, title: true } }),
+    prisma.giftCard.findMany({ where: { code: { contains: upper } }, take: 5, select: { code: true, balance: true } }),
+    prisma.payment.findMany({ where: { OR: [{ reference: { contains: upper } }, { customerName: like }] }, take: 5, select: { reference: true, amount: true, method: true } }),
+  ]);
+  res.json({ results: [
+    ...customers.map((c) => ({ type: "Customer", label: c.name, detail: c.phone, tab: "customers" })),
+    ...services.map((s) => ({ type: "Service", label: s.name, detail: "", tab: "services" })),
+    ...staff.map((s) => ({ type: "Staff", label: s.name, detail: s.role, tab: "staff" })),
+    ...packages.map((p) => ({ type: "Package", label: p.title, detail: "", tab: "packages" })),
+    ...courses.map((c) => ({ type: "Course", label: c.title, detail: "", tab: "academy" })),
+    ...giftcards.map((g) => ({ type: "Gift card", label: g.code, detail: `$${g.balance}`, tab: "giftcards" })),
+    ...payments.map((p) => ({ type: "Payment", label: p.reference, detail: `$${p.amount} · ${p.method}`, tab: "payments" })),
+  ] });
 });
 
 // Emergency close — pause online booking + show a site-wide notice.
