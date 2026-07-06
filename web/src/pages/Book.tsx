@@ -1,11 +1,12 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
 import { useI18n } from "../context/I18n";
 import { WaitlistForm } from "../components/WaitlistForm";
 import { PromoField, type Applied } from "../components/PromoField";
+import { PaymentMethodPicker, type PayMethod } from "../components/PaymentMethodPicker";
 import type { Category, Staff } from "../types";
 
 const ymd = (d: Date) => d.toLocaleDateString("en-CA");
@@ -33,9 +34,11 @@ export function Book() {
   const [form, setForm] = useState({ customerName: "", customerPhone: "", customerEmail: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [done, setDone] = useState<{ date: string; time: string; staffName: string } | null>(null);
+  const [done, setDone] = useState<{ date: string; time: string; staffName: string; method: PayMethod } | null>(null);
   const [waitOpen, setWaitOpen] = useState(false);
   const [promo, setPromo] = useState<Applied | null>(null);
+  const [payMethod, setPayMethod] = useState<PayMethod>("CASH");
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.get<Category[]>("/api/catalog").then((c) => {
@@ -90,8 +93,13 @@ export function Book() {
     if (!form.customerName.trim() || !form.customerPhone.trim()) { setErr("Please enter your name and phone."); return; }
     setBusy(true); setErr("");
     try {
-      const r = await api.post<{ appointment: { staffName: string } }>("/api/appointments", { serviceId, staffId, date, time, addOnIds, promoCode: promo?.code, ...form }, authHeader);
-      setDone({ date, time, staffName: r.appointment.staffName });
+      const r = await api.post<{ appointment?: { staffName: string }; paymentPending?: boolean; redirectUrl?: string | null; reference?: string }>("/api/appointments", { serviceId, staffId, date, time, addOnIds, promoCode: promo?.code, paymentMethod: payMethod, ...form }, authHeader);
+      if (r.paymentPending) {
+        // Whish: go to the gateway if available, else our status page to await confirmation.
+        if (r.redirectUrl) { window.location.href = r.redirectUrl; return; }
+        navigate(`/payment/${r.reference}`); return;
+      }
+      setDone({ date, time, staffName: r.appointment?.staffName ?? "", method: payMethod });
     } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Couldn't complete the booking."); } finally { setBusy(false); }
   }
 
@@ -106,7 +114,9 @@ export function Book() {
           <Row k="When" v={`${prettyDate(done.date)} at ${done.time}`} />
           <Row k="With" v={done.staffName || "Our team"} />
           <Row k="Total" v={priceLabel(total)} />
+          <Row k="Payment" v={done.method === "CASH" ? "Cash — pay on arrival" : "Whish"} />
         </div>
+        {done.method === "CASH" && <p className="mt-3 rounded-xl bg-brand-soft/50 px-4 py-2.5 text-sm text-ink">Please bring {priceLabel(total)} in cash to your appointment.</p>}
         <div className="mt-6 flex flex-col gap-2">
           <a href={`https://wa.me/${SITE.whatsapp}`} target="_blank" rel="noreferrer" className="btn btn-primary py-3">💬 Message us on WhatsApp</a>
           <Link to="/" className="btn btn-ghost py-2.5">Back to home</Link>
@@ -263,8 +273,9 @@ export function Book() {
               <input value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} required placeholder={t("Phone number *")} className="input" />
               <input value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} placeholder={t("Email (optional)")} className="input" />
               <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} rows={2} placeholder={t("Anything we should know? (optional)")} className="input" />
+              <PaymentMethodPicker value={payMethod} onChange={setPayMethod} />
               {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600">{err}</p>}
-              <button type="submit" disabled={busy} className="btn btn-primary w-full py-3.5 text-lg disabled:opacity-60">{busy ? t("Booking…") : t("Confirm booking")}</button>
+              <button type="submit" disabled={busy} className="btn btn-primary w-full py-3.5 text-lg disabled:opacity-60">{busy ? t("Booking…") : payMethod === "WHISH" ? t("Continue to payment") : t("Confirm booking")}</button>
               <button type="button" onClick={() => setStep(3)} className="btn btn-ghost w-full py-2.5 text-sm">{t("← Back")}</button>
             </form>
           )}

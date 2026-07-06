@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { api, money } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
+import { PaymentMethodPicker, type PayMethod } from "../components/PaymentMethodPicker";
 import { SITE } from "../config";
 import type { GiftCard } from "../types";
 
 export function GiftCards() {
   const { customer, authHeader } = useCustomer();
+  const navigate = useNavigate();
   const [cfg, setCfg] = useState<{ amounts: number[]; min: number; max: number } | null>(null);
   const [amount, setAmount] = useState(50);
   const [f, setF] = useState({ purchaserName: "", purchaserEmail: "", recipientName: "", message: "" });
+  const [payMethod, setPayMethod] = useState<PayMethod>("CASH");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [done, setDone] = useState<GiftCard | null>(null);
   const [checkCode, setCheckCode] = useState("");
   const [checkResult, setCheckResult] = useState<GiftCard | null>(null);
   const [checkErr, setCheckErr] = useState("");
@@ -23,8 +26,13 @@ export function GiftCards() {
   async function buy() {
     if (cfg && (amount < cfg.min || amount > cfg.max)) { setErr(`Amount must be between ${money(cfg.min)} and ${money(cfg.max)}.`); return; }
     setBusy(true); setErr("");
-    try { setDone(await api.post<GiftCard>("/api/gift-cards/buy", { amount, ...f }, authHeader)); }
-    catch (e) { setErr(e instanceof Error ? e.message : "Couldn't complete the purchase."); } finally { setBusy(false); }
+    try {
+      // The code is delivered only after payment — go to the gateway (Whish) or our
+      // status page, which reveals the code once the payment is confirmed.
+      const r = await api.post<{ redirectUrl?: string | null; reference: string }>("/api/gift-cards/buy", { amount, paymentMethod: payMethod, ...f }, authHeader);
+      if (r.redirectUrl) { window.location.href = r.redirectUrl; return; }
+      navigate(`/payment/${r.reference}`);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't complete the purchase."); } finally { setBusy(false); }
   }
   async function check() {
     setCheckErr(""); setCheckResult(null);
@@ -41,38 +49,25 @@ export function GiftCards() {
           <p className="mt-2 text-muted">Treat someone to a Riwa's Glam experience. Buy a digital gift card and share the code — they redeem it in-salon.</p>
         </div>
 
-        {done ? (
-          <div className="card mt-8 p-8 text-center">
-            <div className="text-4xl">🎁</div>
-            <p className="mt-2 font-display text-xl font-bold text-ink">Gift card ready!</p>
-            <p className="mt-1 text-muted">{money(done.balance)} for {f.recipientName || "your recipient"}.</p>
-            <div className="mt-4 rounded-2xl bg-brand-soft p-4">
-              <p className="text-xs uppercase tracking-wide text-muted">Gift card code</p>
-              <p className="mt-1 font-mono text-lg font-bold text-brand-dark">{done.code}</p>
+        <div className="card mt-8 space-y-4 p-6">
+          <div>
+            <p className="text-sm font-semibold text-ink">Amount</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(cfg?.amounts ?? [25, 50, 100]).map((v) => <button key={v} onClick={() => setAmount(v)} className={`chip ${amount === v ? "chip-active" : ""}`}>{money(v)}</button>)}
+              <input type="number" min={cfg?.min ?? 10} max={cfg?.max ?? 500} value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="input w-28 !py-1.5 text-sm" />
             </div>
-            <p className="mt-3 text-sm text-muted">Share this code with {f.recipientName || "them"}. They present it at the salon to redeem.</p>
-            <button onClick={() => { setDone(null); setF({ purchaserName: customer?.name ?? "", purchaserEmail: customer?.email ?? "", recipientName: "", message: "" }); }} className="btn btn-ghost mt-5 px-5 py-2.5">Buy another</button>
           </div>
-        ) : (
-          <div className="card mt-8 space-y-4 p-6">
-            <div>
-              <p className="text-sm font-semibold text-ink">Amount</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(cfg?.amounts ?? [25, 50, 100]).map((v) => <button key={v} onClick={() => setAmount(v)} className={`chip ${amount === v ? "chip-active" : ""}`}>{money(v)}</button>)}
-                <input type="number" min={cfg?.min ?? 10} max={cfg?.max ?? 500} value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="input w-28 !py-1.5 text-sm" />
-              </div>
-            </div>
-            <input value={f.recipientName} onChange={(e) => setF({ ...f, recipientName: e.target.value })} placeholder="Recipient's name" className="input" />
-            <textarea value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} rows={2} placeholder="Personal message (optional)" className="input" />
-            <div className="grid grid-cols-2 gap-3">
-              <input value={f.purchaserName} onChange={(e) => setF({ ...f, purchaserName: e.target.value })} placeholder="Your name" className="input" />
-              <input value={f.purchaserEmail} onChange={(e) => setF({ ...f, purchaserEmail: e.target.value })} placeholder="Your email" className="input" />
-            </div>
-            {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600">{err}</p>}
-            <div className="rounded-xl border border-border p-3 text-xs text-muted">💳 Demo checkout — no real payment is taken. The gift card is issued instantly with a code.</div>
-            <button onClick={buy} disabled={busy} className="btn btn-primary w-full py-3 text-lg disabled:opacity-60">{busy ? "Processing…" : `Buy ${money(amount || 0)} gift card`}</button>
+          <input value={f.recipientName} onChange={(e) => setF({ ...f, recipientName: e.target.value })} placeholder="Recipient's name" className="input" />
+          <textarea value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} rows={2} placeholder="Personal message (optional)" className="input" />
+          <div className="grid grid-cols-2 gap-3">
+            <input value={f.purchaserName} onChange={(e) => setF({ ...f, purchaserName: e.target.value })} placeholder="Your name" className="input" />
+            <input value={f.purchaserEmail} onChange={(e) => setF({ ...f, purchaserEmail: e.target.value })} placeholder="Your email" className="input" />
           </div>
-        )}
+          <PaymentMethodPicker value={payMethod} onChange={setPayMethod} />
+          {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600">{err}</p>}
+          <p className="text-xs text-muted">The gift card code is delivered once your payment is confirmed.</p>
+          <button onClick={buy} disabled={busy} className="btn btn-primary w-full py-3 text-lg disabled:opacity-60">{busy ? "Processing…" : payMethod === "WHISH" ? `Pay ${money(amount || 0)} with Whish` : `Buy ${money(amount || 0)} gift card`}</button>
+        </div>
 
         {/* Check balance */}
         <div className="card mt-6 p-6">

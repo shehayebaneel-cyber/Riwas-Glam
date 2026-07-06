@@ -8,6 +8,8 @@ import { Packages } from "./pages/Packages";
 import { Services } from "./pages/Services";
 import { Gallery } from "./pages/Gallery";
 import { Academy } from "./pages/Academy";
+import { Payment } from "./pages/Payment";
+import { WhatsAppIcon } from "./components/Icons";
 import { SITE } from "./config";
 
 // Lazy-loaded so the customer site doesn't ship the (large) admin + account code.
@@ -45,12 +47,13 @@ export default function App() {
           <Route path="/packages" element={<Packages />} />
           <Route path="/book" element={<BookRoute />} />
           <Route path="/gift-cards" element={<GiftCards />} />
+          <Route path="/payment/:reference" element={<Payment />} />
           <Route path="/account" element={<Account />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/staff" element={<StaffPortal />} />
         </Routes>
       </Suspense>
-      <a href={`https://wa.me/${SITE.whatsapp}`} target="_blank" rel="noreferrer" aria-label="Chat on WhatsApp" title="Chat on WhatsApp" className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-2xl text-white shadow-lg transition hover:scale-105">💬</a>
+      <a href={`https://wa.me/${SITE.whatsapp}`} target="_blank" rel="noreferrer" aria-label="Chat on WhatsApp" title="Chat on WhatsApp" className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition hover:scale-105 active:scale-95"><WhatsAppIcon className="h-7 w-7" /></a>
     </>
   );
 }

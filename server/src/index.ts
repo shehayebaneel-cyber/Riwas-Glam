@@ -6,6 +6,8 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { prisma } from "./db.js";
 import { SALON } from "./config.js";
 import { availableSlots, pickFreeStaff, type DaySchedule } from "./lib/slots.js";
+import { isPaymentMethod, genReference, whishInitiate, whishVerifyWebhook, whishParseWebhook, whishConfigured } from "./payments.js";
+import type { Payment } from "@prisma/client";
 
 const app = express();
 app.set("trust proxy", true); // Render terminates TLS; trust x-forwarded-proto for absolute image URLs
@@ -51,6 +53,59 @@ const tierFor = (lifetimePoints: number, tiers: Tier[]) => [...tiers].sort((a, b
 const GC_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const gcCode = () => { let s = ""; for (let i = 0; i < 12; i++) s += GC_ALPHABET[crypto.randomInt(GC_ALPHABET.length)]; return `GC-${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8, 12)}`; };
 
+// ---- Payments (unified ledger; gateway specifics live in payments.ts) ----
+const WEB_URL = (process.env.WEB_URL || "https://riwasglam.beauty").replace(/\/$/, ""); // customer site base for return URLs
+const WHISH_HOLD_MS = 20 * 60 * 1000; // unpaid Whish booking holds expire after 20 min
+
+async function createPayment(input: { kind: "BOOKING" | "GIFTCARD"; method: string; amount: number; appointmentId?: number | null; giftCardId?: number | null; customerName?: string; customerEmail?: string; customerPhone?: string; meta?: unknown }) {
+  let reference = genReference();
+  for (let i = 0; i < 5 && (await prisma.payment.findUnique({ where: { reference } })); i++) reference = genReference();
+  return prisma.payment.create({ data: {
+    reference, kind: input.kind, method: input.method, amount: round2(input.amount), currency: "USD",
+    appointmentId: input.appointmentId ?? null, giftCardId: input.giftCardId ?? null,
+    customerName: STR(input.customerName, 80), customerEmail: STR(input.customerEmail, 120), customerPhone: STR(input.customerPhone, 40),
+    provider: input.method === "WHISH" ? "whish" : "", meta: JSON.stringify(input.meta ?? {}),
+  } });
+}
+
+// Deliver the purchase once its payment is PAID: confirm the booking / activate + email the gift card.
+async function fulfillPayment(payment: Payment) {
+  if (payment.kind === "BOOKING" && payment.appointmentId) {
+    const appt = await prisma.appointment.update({ where: { id: payment.appointmentId }, data: { status: "CONFIRMED", paymentStatus: "PAID" } }).catch(() => null);
+    if (appt) notify("confirmation", { email: appt.customerEmail || undefined, phone: appt.customerPhone || undefined, data: { name: appt.customerName, service: appt.serviceName, date: appt.date, time: appt.time } });
+  } else if (payment.kind === "GIFTCARD" && payment.giftCardId) {
+    const card = await prisma.giftCard.update({ where: { id: payment.giftCardId }, data: { status: "ACTIVE", paymentStatus: "PAID" } }).catch(() => null);
+    if (card?.purchaserEmail) notify("giftcard", { email: card.purchaserEmail, data: { code: card.code, value: `$${card.initialValue}` } });
+  }
+}
+
+// Move a payment to PAID (idempotent — gateways retry webhooks) and fulfil it.
+async function markPaymentPaid(payment: Payment, extra?: { txnId?: string; providerData?: unknown }) {
+  if (payment.status === "PAID") return payment;
+  const updated = await prisma.payment.update({ where: { id: payment.id }, data: {
+    status: "PAID", paidAt: new Date(),
+    providerTxnId: extra?.txnId ? STR(extra.txnId, 120) : payment.providerTxnId,
+    providerData: extra?.providerData !== undefined ? JSON.stringify(extra.providerData).slice(0, 5000) : payment.providerData,
+  } });
+  await fulfillPayment(updated);
+  return updated;
+}
+
+// Mark a payment FAILED/CANCELLED and reflect it on the linked booking / gift card.
+async function voidPayment(payment: Payment, status: "FAILED" | "CANCELLED") {
+  const updated = await prisma.payment.update({ where: { id: payment.id }, data: { status } });
+  if (payment.appointmentId) await prisma.appointment.update({ where: { id: payment.appointmentId }, data: { paymentStatus: status, status: "CANCELLED" } }).catch(() => {});
+  if (payment.giftCardId) await prisma.giftCard.update({ where: { id: payment.giftCardId }, data: { paymentStatus: status, status: "VOID" } }).catch(() => {});
+  return updated;
+}
+
+// Free the slot of any Whish booking that was never paid within the hold window.
+async function releaseStaleWhishHolds() {
+  const cutoff = new Date(Date.now() - WHISH_HOLD_MS);
+  const stale = await prisma.payment.findMany({ where: { kind: "BOOKING", method: "WHISH", status: "PENDING", createdAt: { lt: cutoff } } });
+  for (const p of stale) await voidPayment(p, "CANCELLED");
+}
+
 app.get("/api/health", (_req, res) => res.json({ ok: true, salon: SALON.name }));
 app.get("/api/info", (_req, res) => res.json({ name: SALON.name, hours: SALON.hours, slotStepMin: SALON.slotStepMin }));
 app.get("/api/staff", async (_req, res) => {
@@ -94,6 +149,7 @@ async function resolvePackage(id: number) {
 }
 
 app.get("/api/availability", async (req, res) => {
+  await releaseStaleWhishHolds();
   const q = req.query as Record<string, string>;
   const date = STR(q.date, 10);
   const staffId = q.staffId ? Number(q.staffId) : null;
@@ -109,12 +165,15 @@ app.get("/api/availability", async (req, res) => {
 
 app.post("/api/appointments", async (req, res) => {
   const b = req.body ?? {};
+  await releaseStaleWhishHolds(); // free any expired unpaid Whish holds before checking availability
   let staffId: number | null = b.staffId ? Number(b.staffId) : null;
   const date = STR(b.date, 10), time = STR(b.time, 5);
   const name = STR(b.customerName, 80), phone = STR(b.customerPhone, 40);
+  const method = (STR(b.paymentMethod, 20).toUpperCase() || "CASH");
   const addOnIds = Array.isArray(b.addOnIds) ? b.addOnIds.map(Number).filter((n: number) => n > 0) : [];
   if (!name || !phone) return res.status(400).json({ error: "Your name and phone are required." });
   if (!isDate(date) || !isTime(time)) return res.status(400).json({ error: "Please pick a valid date and time." });
+  if (!isPaymentMethod(method)) return res.status(400).json({ error: "Please choose a valid payment method." });
   const isPkg = !!b.packageId;
   const pr = isPkg ? await resolvePackage(Number(b.packageId)) : null;
   const sr = isPkg ? null : await resolveBooking(Number(b.serviceId), addOnIds);
@@ -140,6 +199,7 @@ app.post("/api/appointments", async (req, res) => {
     const pr2 = await validatePromo(STR(b.promoCode), price, custId);
     if (pr2.ok) { price = Math.max(0, round2(price - pr2.discount)); promoUsed = pr2.code; await prisma.promoCode.update({ where: { code: pr2.code }, data: { usedCount: { increment: 1 } } }).catch(() => {}); }
   }
+  const isWhish = method === "WHISH";
   const appointment = await prisma.appointment.create({
     data: {
       serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
@@ -147,11 +207,27 @@ app.post("/api/appointments", async (req, res) => {
       date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
       addOns: JSON.stringify(pr ? [] : sr!.addOns.map((a) => ({ name: a.name, price: a.price }))),
       price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
-      note: STR(b.note, 500), promoCode: promoUsed, branchId: await defaultBranchId(), status: "CONFIRMED",
+      note: STR(b.note, 500), promoCode: promoUsed, branchId: await defaultBranchId(),
+      // Whish: hold the slot as PENDING until the gateway confirms. Cash: confirmed now, pay on arrival.
+      status: isWhish ? "PENDING" : "CONFIRMED", paymentMethod: method, paymentStatus: "PENDING",
     },
   });
-  notify("confirmation", { email: appointment.customerEmail || undefined, phone: appointment.customerPhone || undefined, data: { name: appointment.customerName, service: appointment.serviceName, date: appointment.date, time: appointment.time } });
-  res.status(201).json({ ok: true, appointment });
+  const payment = await createPayment({ kind: "BOOKING", method, amount: price, appointmentId: appointment.id, customerName: name, customerEmail: appointment.customerEmail, customerPhone: phone });
+  await prisma.appointment.update({ where: { id: appointment.id }, data: { paymentId: payment.id } });
+
+  if (!isWhish) {
+    // Cash: the slot is held; the salon collects and marks it paid on arrival.
+    notify("confirmation", { email: appointment.customerEmail || undefined, phone: appointment.customerPhone || undefined, data: { name: appointment.customerName, service: appointment.serviceName, date: appointment.date, time: appointment.time } });
+    return res.status(201).json({ ok: true, method, payment: { reference: payment.reference, status: payment.status }, appointment });
+  }
+  // Whish: start the gateway. Do NOT confirm the booking until payment is confirmed.
+  const init = await whishInitiate({ reference: payment.reference, amount: price, currency: "USD", successUrl: `${WEB_URL}/payment/${payment.reference}`, failureUrl: `${WEB_URL}/payment/${payment.reference}`, callbackUrl: `${req.protocol}://${req.get("host")}/api/webhooks/whish`, customer: { name, phone, email: appointment.customerEmail } });
+  if (init.ok && init.redirectUrl) {
+    if (init.providerRef) await prisma.payment.update({ where: { id: payment.id }, data: { providerRef: init.providerRef } });
+    return res.status(201).json({ ok: true, method, paymentPending: true, redirectUrl: init.redirectUrl, reference: payment.reference });
+  }
+  // Whish not connected yet — the booking stays a pending hold; the customer is told it's awaiting payment.
+  return res.status(201).json({ ok: true, method, paymentPending: true, redirectUrl: null, whishNotReady: !whishConfigured(), reference: payment.reference });
 });
 
 // Public approved reviews + rating summary (for the site).
@@ -171,19 +247,64 @@ app.get("/api/gift-cards/config", async (_req, res) => {
 app.post("/api/gift-cards/buy", async (req, res) => {
   const cfg = await getSetting("giftcard", GC_DEFAULT);
   const amount = round2(NUM(req.body?.amount, 0));
+  const method = (STR(req.body?.paymentMethod, 20).toUpperCase() || "CASH");
   if (!(amount >= cfg.min) || amount > cfg.max) return res.status(400).json({ error: `Amount must be between $${cfg.min} and $${cfg.max}.` });
+  if (!isPaymentMethod(method)) return res.status(400).json({ error: "Please choose a valid payment method." });
   let code = gcCode();
   for (let i = 0; i < 5 && (await prisma.giftCard.findUnique({ where: { code } })); i++) code = gcCode();
   const expiresAt = cfg.expiryMonths ? new Date(Date.now() + cfg.expiryMonths * 30 * 86400000) : null;
-  const card = await prisma.giftCard.create({ data: { code, initialValue: amount, balance: amount, purchaserName: STR(req.body?.purchaserName, 80), purchaserEmail: STR(req.body?.purchaserEmail, 120), recipientName: STR(req.body?.recipientName, 80), message: STR(req.body?.message, 500), customerId: optionalCustomerId(req), expiresAt } });
-  if (card.purchaserEmail) notify("giftcard", { email: card.purchaserEmail, data: { code: card.code, value: `$${card.initialValue}` } });
-  res.status(201).json({ code: card.code, balance: card.balance, expiresAt: card.expiresAt });
+  // Created PENDING — the code is NOT delivered until payment is confirmed (cash marked paid, or Whish webhook).
+  const card = await prisma.giftCard.create({ data: { code, initialValue: amount, balance: amount, status: "PENDING", paymentMethod: method, paymentStatus: "PENDING", purchaserName: STR(req.body?.purchaserName, 80), purchaserEmail: STR(req.body?.purchaserEmail, 120), recipientName: STR(req.body?.recipientName, 80), message: STR(req.body?.message, 500), customerId: optionalCustomerId(req), expiresAt } });
+  const payment = await createPayment({ kind: "GIFTCARD", method, amount, giftCardId: card.id, customerName: card.purchaserName, customerEmail: card.purchaserEmail });
+  await prisma.giftCard.update({ where: { id: card.id }, data: { paymentId: payment.id } });
+
+  if (method === "CASH") {
+    // Pay in salon; staff marks the payment paid and the code is then issued/emailed.
+    return res.status(201).json({ pending: true, method, reference: payment.reference, amount });
+  }
+  const init = await whishInitiate({ reference: payment.reference, amount, currency: "USD", successUrl: `${WEB_URL}/payment/${payment.reference}`, failureUrl: `${WEB_URL}/payment/${payment.reference}`, callbackUrl: `${req.protocol}://${req.get("host")}/api/webhooks/whish`, customer: { name: card.purchaserName, phone: "", email: card.purchaserEmail } });
+  if (init.ok && init.redirectUrl) {
+    if (init.providerRef) await prisma.payment.update({ where: { id: payment.id }, data: { providerRef: init.providerRef } });
+    return res.status(201).json({ paymentPending: true, method, redirectUrl: init.redirectUrl, reference: payment.reference, amount });
+  }
+  return res.status(201).json({ paymentPending: true, method, redirectUrl: null, whishNotReady: !whishConfigured(), reference: payment.reference, amount });
 });
 app.get("/api/gift-cards/:code", async (req, res) => {
   const card = await prisma.giftCard.findUnique({ where: { code: STR(req.params.code, 40).toUpperCase() } });
   if (!card) return res.status(404).json({ error: "Gift card not found." });
   const expired = !!(card.expiresAt && card.expiresAt.getTime() < Date.now());
   res.json({ code: card.code, balance: card.balance, initialValue: card.initialValue, status: card.status === "ACTIVE" && expired ? "EXPIRED" : card.status, expiresAt: card.expiresAt, recipientName: card.recipientName });
+});
+
+// ---- Payments (public status + gateway webhook) ----
+// The checkout return page polls this to reflect Pending → Paid and reveal the code.
+app.get("/api/payments/:reference", async (req, res) => {
+  const p = await prisma.payment.findUnique({ where: { reference: STR(req.params.reference, 40).toUpperCase() } });
+  if (!p) return res.status(404).json({ error: "Payment not found." });
+  const out: Record<string, unknown> = { reference: p.reference, kind: p.kind, method: p.method, status: p.status, amount: p.amount, currency: p.currency, createdAt: p.createdAt };
+  if (p.status === "PAID" && p.kind === "GIFTCARD" && p.giftCardId) {
+    const c = await prisma.giftCard.findUnique({ where: { id: p.giftCardId } });
+    if (c) out.giftCard = { code: c.code, balance: c.balance, expiresAt: c.expiresAt };
+  }
+  if (p.status === "PAID" && p.kind === "BOOKING" && p.appointmentId) {
+    const a = await prisma.appointment.findUnique({ where: { id: p.appointmentId } });
+    if (a) out.booking = { serviceName: a.serviceName, date: a.date, time: a.time, staffName: a.staffName };
+  }
+  res.json(out);
+});
+
+// Whish calls this to confirm a payment. We only fulfil (confirm booking / issue
+// gift card) here — never before the gateway confirms. Idempotent for retries.
+app.post("/api/webhooks/whish", async (req, res) => {
+  if (!whishVerifyWebhook(req.headers as Record<string, unknown>, JSON.stringify(req.body ?? {}))) return res.status(401).json({ error: "Invalid signature." });
+  const evt = whishParseWebhook(req.body);
+  if (!evt.reference) return res.status(400).json({ error: "Missing reference." });
+  const p = await prisma.payment.findUnique({ where: { reference: evt.reference.toUpperCase() } });
+  if (!p) return res.status(404).json({ error: "Unknown payment." });
+  if (p.status === "PAID" || p.status === "CANCELLED" || p.status === "REFUNDED") return res.json({ ok: true }); // already settled
+  if (evt.success) await markPaymentPaid(p, { txnId: evt.txnId, providerData: req.body });
+  else await voidPayment(p, "FAILED");
+  res.json({ ok: true });
 });
 
 // ---- Admin ----
@@ -208,7 +329,7 @@ function permForPath(p: string): string {
   if (p.includes("/packages")) return "packages";
   if (p.includes("/waitlist")) return "waitlist";
   if (p.includes("/categories") || p.includes("/services") || p.includes("/addons") || p.includes("/catalog") || p.includes("/reorder")) return "services";
-  if (p.includes("/appointments") || p.includes("/commissions") || p.includes("/customers")) return "bookings";
+  if (p.includes("/appointments") || p.includes("/commissions") || p.includes("/customers") || p.includes("/payments")) return "bookings";
   return "settings"; // owner-only fallback (only the master key / OWNER passes)
 }
 // Resolves the caller (master admin key OR a staff token) and enforces the path's permission.
@@ -278,10 +399,39 @@ app.post("/api/admin/appointments/new", requireAdmin, async (req, res) => {
     staffId, customerId: cust?.id ?? null, customerName: name, customerPhone: phone, customerEmail: email,
     date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
     addOns: "[]", price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
-    note: STR(b.note, 500), branchId: await defaultBranchId(), status: "CONFIRMED",
+    note: STR(b.note, 500), branchId: await defaultBranchId(), status: "CONFIRMED", paymentMethod: "CASH", paymentStatus: "PENDING",
   } });
+  const payment = await createPayment({ kind: "BOOKING", method: "CASH", amount: price, appointmentId: appointment.id, customerName: name, customerEmail: email, customerPhone: phone });
+  await prisma.appointment.update({ where: { id: appointment.id }, data: { paymentId: payment.id } });
   notify("confirmation", { email: email || undefined, phone, data: { name, service: appointment.serviceName, date, time } });
-  res.status(201).json({ ok: true, appointment });
+  res.status(201).json({ ok: true, appointment, payment: { reference: payment.reference, status: payment.status } });
+});
+
+// ---- Admin: payments ----
+app.get("/api/admin/payments", requireAdmin, async (req, res) => {
+  await releaseStaleWhishHolds();
+  const status = STR((req.query as Record<string, string>).status, 20).toUpperCase();
+  const method = STR((req.query as Record<string, string>).method, 20).toUpperCase();
+  const where: Record<string, unknown> = {};
+  if (["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"].includes(status)) where.status = status;
+  if (isPaymentMethod(method)) where.method = method;
+  const items = await prisma.payment.findMany({ where, orderBy: { createdAt: "desc" }, take: 500 });
+  res.json(items);
+});
+// Manual confirmation for CASH only. Online methods are confirmed by the gateway webhook.
+app.post("/api/admin/payments/:id/mark-paid", requireAdmin, async (req, res) => {
+  const p = await prisma.payment.findUnique({ where: { id: STR(req.params.id, 40) } });
+  if (!p) return res.status(404).json({ error: "Payment not found." });
+  if (p.method !== "CASH") return res.status(400).json({ error: "Only cash payments are marked paid manually — online payments are confirmed automatically by the gateway." });
+  if (p.status === "PAID") return res.json(p);
+  res.json(await markPaymentPaid(p));
+});
+// Cancel an unpaid payment (releases the booking hold / voids the pending gift card).
+app.post("/api/admin/payments/:id/cancel", requireAdmin, async (req, res) => {
+  const p = await prisma.payment.findUnique({ where: { id: STR(req.params.id, 40) } });
+  if (!p) return res.status(404).json({ error: "Payment not found." });
+  if (p.status === "PAID") return res.status(400).json({ error: "This payment is already paid — issue a refund instead." });
+  res.json(await voidPayment(p, "CANCELLED"));
 });
 
 // ---- Admin: catalog ----

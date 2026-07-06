@@ -192,10 +192,42 @@ model GiftCard {
   purchaserEmail String   @default("")
   recipientName  String   @default("")
   message        String   @default("")
-  status         String   @default("ACTIVE") // ACTIVE | REDEEMED | VOID
+  status         String   @default("ACTIVE") // PENDING | ACTIVE | REDEEMED | VOID
+  paymentId      String?  @unique // linked Payment; the code stays PENDING until it is PAID
+  paymentMethod  String   @default("CASH") // CASH | WHISH (future: CARD | BANK)
+  paymentStatus  String   @default("PENDING") // PENDING | PAID | FAILED | CANCELLED
   customerId     Int?
   expiresAt      DateTime?
   createdAt      DateTime @default(now())
+}
+
+// A unified payment record — the single source of truth for money owed and paid,
+// across bookings and gift cards (and future product orders). One model means a
+// new method (card, bank) later is just a new `method` value + a provider branch;
+// the checkout endpoints and the rest of the schema don't change.
+model Payment {
+  id            String    @id @default(cuid())
+  reference     String    @unique // customer-facing ref, e.g. RG-7F3K-9Q2M
+  kind          String    // BOOKING | GIFTCARD
+  method        String    // CASH | WHISH   (future: CARD | BANK)
+  status        String    @default("PENDING") // PENDING | PAID | FAILED | CANCELLED | REFUNDED
+  amount        Float     @default(0)
+  currency      String    @default("USD")
+  appointmentId Int?      @unique // set when kind = BOOKING
+  giftCardId    Int?      @unique // set when kind = GIFTCARD
+  customerName  String    @default("")
+  customerEmail String    @default("")
+  customerPhone String    @default("")
+  provider      String    @default("") // gateway used, e.g. "whish"
+  providerTxnId String    @default("") // gateway transaction id (Whish)
+  providerRef   String    @default("") // our order/collect id shared with the gateway
+  providerData  String    @default("") // JSON of the last gateway payload (audit)
+  meta          String    @default("{}") // JSON payload used to fulfil the purchase on PAID
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  @@index([status])
+  @@index([kind])
 }
 
 // A promotional discount code applied at checkout.
@@ -370,7 +402,10 @@ model Appointment {
   promoCode        String   @default("") // discount code applied, if any
   branchId         Int?
   branch           Branch?  @relation(fields: [branchId], references: [id])
-  status           String   @default("CONFIRMED") // CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
+  status           String   @default("CONFIRMED") // PENDING | CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
+  paymentId        String?  @unique // linked Payment (the money side of this booking)
+  paymentMethod    String   @default("CASH") // CASH | WHISH (future: CARD | BANK)
+  paymentStatus    String   @default("PENDING") // PENDING | PAID | FAILED | CANCELLED
   stockDeducted    Boolean  @default(false) // inventory already deducted for this visit?
   pointsAwarded    Boolean  @default(false) // loyalty points already granted for this visit?
   createdAt        DateTime @default(now())

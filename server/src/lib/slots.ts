@@ -13,7 +13,8 @@ function staffFree(staff: StaffLite, dow: number, date: string, t: number, durat
   const open = toMin(day.open), close = toMin(day.close);
   if (t < open || t + durationMin > close) return false;
   if (day.breakStart && day.breakEnd) { const bs = toMin(day.breakStart), be = toMin(day.breakEnd); if (t < be && bs < t + durationMin) return false; }
-  for (const a of staffAppts) if (a.status === "CONFIRMED") { const as = toMin(a.time); if (t < as + a.durationMin && as < t + durationMin) return false; }
+  // Both confirmed bookings and unpaid PENDING (Whish) holds occupy the slot.
+  for (const a of staffAppts) if (a.status === "CONFIRMED" || a.status === "PENDING") { const as = toMin(a.time); if (t < as + a.durationMin && as < t + durationMin) return false; }
   return true;
 }
 
