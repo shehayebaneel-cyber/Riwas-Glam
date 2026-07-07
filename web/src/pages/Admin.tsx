@@ -103,6 +103,15 @@ export function Admin() {
     await api.patch(`/api/admin/appointments/${a.id}`, { actualMinutes: minutes }, { "x-admin-key": key }).catch(() => {}); load();
   }
   function logout() { localStorage.removeItem(KEY); setKey(""); setAuthed(false); setPerms([]); }
+  async function downloadBackup() {
+    try {
+      const data = await api.get<unknown>("/api/admin/export", { "x-admin-key": key });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `riwasglam-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("Couldn't export data."); }
+  }
 
   if (checking) return <div className="p-16 text-center text-muted">Loading…</div>;
 
@@ -149,6 +158,14 @@ export function Admin() {
       </div>
 
       {perms.includes("website") && <div className="mt-4"><EmergencyControl adminKey={key} /></div>}
+      {me.role === "OWNER" && (
+        <div className="mt-3 rounded-2xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div><p className="text-sm font-bold text-ink">Data backup</p><p className="text-xs text-muted">Your database is continuously backed up by the host. Download a manual JSON copy anytime.</p></div>
+            <button onClick={downloadBackup} className="btn btn-ghost shrink-0 px-4 py-2 text-sm">Download</button>
+          </div>
+        </div>
+      )}
 
       {tab === "home" && <div className="mt-5"><DashboardHome adminKey={key} go={setTab as (t: string) => void} /></div>}
       {tab === "services" && <div className="mt-5"><CatalogAdmin adminKey={key} /></div>}

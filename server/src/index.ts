@@ -739,6 +739,19 @@ app.get("/api/admin/search", requireAdmin, async (req, res) => {
   ] });
 });
 
+// Owner data export (JSON) — a downloadable manual backup of the key tables.
+// (The database itself is continuously backed up at the host; in-app restore is
+// intentionally not exposed — that belongs to the host's point-in-time recovery.)
+app.get("/api/admin/export", requireAdmin, async (_req, res) => {
+  const [customers, appointments, payments, giftCards, products, stockMovements, expenses, reviews, suppliers, purchaseOrders, courses, packages, promoCodes, staffGoals] = await Promise.all([
+    prisma.customer.findMany(), prisma.appointment.findMany(), prisma.payment.findMany(), prisma.giftCard.findMany(),
+    prisma.product.findMany(), prisma.stockMovement.findMany(), prisma.expense.findMany(), prisma.review.findMany(),
+    prisma.supplier.findMany(), prisma.purchaseOrder.findMany(), prisma.course.findMany(), prisma.package.findMany(),
+    prisma.promoCode.findMany(), prisma.staffGoal.findMany(),
+  ]);
+  res.json({ exportedAt: new Date().toISOString(), customers, appointments, payments, giftCards, products, stockMovements, expenses, reviews, suppliers, purchaseOrders, courses, packages, promoCodes, staffGoals });
+});
+
 // Emergency close — pause online booking + show a site-wide notice.
 app.get("/api/admin/settings/emergency", requireAdmin, async (_req, res) => res.json(await getSetting("emergencyClose", EMERGENCY_DEFAULT)));
 app.post("/api/admin/settings/emergency", requireAdmin, async (req, res) => {
