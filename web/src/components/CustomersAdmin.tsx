@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { ImageUpload } from "./ImageUpload";
 import { CustomerInsights } from "./CustomerInsights";
+import { ConsentForms } from "./ConsentForms";
 
 type ListItem = { id: number; name: string; email: string; phone: string; birthday: string; tags: string[]; visits: number; spent: number; lastVisit: string };
 type Profile = {
@@ -164,6 +165,8 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
                 ))}
               </div>
             )}
+
+            <ConsentForms id={id} customerName={p.name} hdr={hdr} />
 
             {/* Gift cards */}
             {p.giftCards.length > 0 && (

@@ -1824,6 +1824,16 @@ app.post("/api/admin/customers/:id/notes", requireAdmin, async (req, res) => {
   res.json(await prisma.customerNote.create({ data: { customerId: Number(req.params.id), author, body } }));
 });
 app.delete("/api/admin/customers/:id/notes/:noteId", requireAdmin, async (req, res) => { await prisma.customerNote.delete({ where: { id: STR(req.params.noteId, 40) } }).catch(() => {}); res.json({ ok: true }); });
+// Signed consent forms on a customer.
+app.get("/api/admin/customers/:id/consents", requireAdmin, async (req, res) => {
+  res.json(await prisma.consentForm.findMany({ where: { customerId: Number(req.params.id) }, orderBy: { signedAt: "desc" } }));
+});
+app.post("/api/admin/customers/:id/consents", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const sig = String(b.signatureUrl ?? "");
+  if (!sig.startsWith("data:image/") || sig.length > 500000) return res.status(400).json({ error: "A signature is required." });
+  res.status(201).json(await prisma.consentForm.create({ data: { customerId: Number(req.params.id), formType: STR(b.formType, 40), customerName: STR(b.customerName, 80), body: STR(b.body, 4000), signatureUrl: sig } }));
+});
+app.delete("/api/admin/customers/:id/consents/:cid", requireAdmin, async (req, res) => { await prisma.consentForm.delete({ where: { id: STR(req.params.cid, 40) } }).catch(() => {}); res.json({ ok: true }); });
 app.post("/api/admin/customers/:id/photos", requireAdmin, async (req, res) => {
   const url = STR(req.body?.url, 600); if (!url) return res.status(400).json({ error: "No image." });
   const kind = STR(req.body?.kind, 12).toUpperCase();

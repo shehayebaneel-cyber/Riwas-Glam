@@ -172,6 +172,18 @@ model CustomerPhoto {
   createdAt  DateTime @default(now())
 }
 
+// A signed consent form (tattoo, botox, facial…) captured on-device.
+model ConsentForm {
+  id           String   @id @default(cuid())
+  customerId   Int
+  formType     String   @default("")
+  customerName String   @default("")
+  signatureUrl String   @default("") // signature image (data URL)
+  body         String   @default("") // the consent text that was agreed to
+  signedAt     DateTime @default(now())
+  @@index([customerId])
+}
+
 // A loyalty reward a customer has redeemed with points — shown to staff in-salon.
 model RewardRedemption {
   id         String   @id @default(cuid())
