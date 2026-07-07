@@ -21,7 +21,7 @@ export interface GiftCard {
 export interface FavService { id: number; name: string; price: number; durationMin: number; categoryId: number }
 
 export interface Appointment {
-  id: number; serviceName: string; staffName: string; staffId?: number | null; date: string; time: string; durationMin: number;
+  id: number; serviceName: string; staffName: string; staffId?: number | null; date: string; time: string; durationMin: number; actualMinutes?: number;
   price: number; commissionPct?: number; commissionAmount?: number;
   customerName: string; customerPhone: string; customerEmail: string; note: string; status: string;
   paymentId?: string | null; paymentMethod?: string; paymentStatus?: string;

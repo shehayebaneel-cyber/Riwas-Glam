@@ -487,7 +487,8 @@ model Appointment {
   customerEmail    String   @default("")
   date             String   // YYYY-MM-DD
   time             String   // HH:MM (start)
-  durationMin      Int      @default(30) // total incl. add-ons
+  durationMin      Int      @default(30) // total incl. add-ons (scheduled/expected)
+  actualMinutes    Int      @default(0) // recorded actual time (0 = not recorded)
   serviceName      String   @default("")
   staffName        String   @default("")
   addOns           String   @default("[]") // JSON [{ name, price }]

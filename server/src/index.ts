@@ -369,6 +369,7 @@ function permForPath(p: string): string {
   if (p.includes("/analytics/customers")) return "bookings"; // customer insights live on the Customers tab
   if (p.includes("/analytics/marketing")) return "marketing"; // marketing dashboard lives on the Marketing tab
   if (p.includes("/analytics/branches")) return "branches";
+  if (p.includes("/analytics/duration")) return "calendar";
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements") || p.includes("/suppliers") || p.includes("/purchase-orders")) return "inventory";
@@ -508,6 +509,16 @@ app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
 // Admin audit trail (owner/managers with the "activity" permission).
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+});
+
+// Duration analytics: scheduled vs actual service time, to improve scheduling.
+app.get("/api/admin/analytics/duration", requireAdmin, async (_req, res) => {
+  const appts = await prisma.appointment.findMany({ where: { status: "COMPLETED", actualMinutes: { gt: 0 } }, select: { serviceName: true, durationMin: true, actualMinutes: true } });
+  const byService: Record<string, { count: number; expected: number; actual: number }> = {};
+  for (const a of appts) { const k = a.serviceName || "—"; (byService[k] ??= { count: 0, expected: 0, actual: 0 }); byService[k].count++; byService[k].expected += a.durationMin; byService[k].actual += a.actualMinutes; }
+  const rows = Object.entries(byService).map(([name, v]) => ({ name, count: v.count, avgExpected: Math.round(v.expected / v.count), avgActual: Math.round(v.actual / v.count), diff: Math.round((v.actual - v.expected) / v.count) })).sort((a, b) => b.count - a.count);
+  const n = appts.length;
+  res.json({ rows, sampleSize: n, avgExpected: n ? Math.round(appts.reduce((s, a) => s + a.durationMin, 0) / n) : 0, avgActual: n ? Math.round(appts.reduce((s, a) => s + a.actualMinutes, 0) / n) : 0 });
 });
 
 // Multi-branch comparison: bookings, revenue and profit per branch.
@@ -750,11 +761,16 @@ app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
   res.json(items.map((a) => ({ ...a, addOns: parseArr(a.addOns) })));
 });
 app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
-  const status = STR(req.body?.status, 20).toUpperCase();
-  if (!["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"].includes(status)) return res.status(400).json({ error: "Invalid status." });
-  const updated = await setAppointmentStatus(Number(req.params.id), status);
-  if (!updated) return res.status(404).json({ error: "Not found." });
-  res.json(updated);
+  const id = Number(req.params.id); const b = req.body ?? {};
+  if (b.actualMinutes !== undefined) await prisma.appointment.update({ where: { id }, data: { actualMinutes: Math.max(0, Math.round(NUM(b.actualMinutes, 0))) } }).catch(() => {});
+  if (b.status !== undefined) {
+    const status = STR(b.status, 20).toUpperCase();
+    if (!["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"].includes(status)) return res.status(400).json({ error: "Invalid status." });
+    const updated = await setAppointmentStatus(id, status);
+    if (!updated) return res.status(404).json({ error: "Not found." });
+    return res.json(updated);
+  }
+  res.json(await prisma.appointment.findUnique({ where: { id } }));
 });
 // Front-desk booking (staff enters a phone-in appointment). More lenient than the
 // public flow — trusts staff on timing; links an existing customer by phone/email.

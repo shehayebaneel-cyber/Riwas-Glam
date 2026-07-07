@@ -34,6 +34,7 @@ import { SuppliersAdmin } from "../components/SuppliersAdmin";
 import { StaffGoalsAdmin } from "../components/StaffGoalsAdmin";
 import { MarketingDashboard } from "../components/MarketingDashboard";
 import { BranchAnalytics } from "../components/BranchAnalytics";
+import { DurationInsights } from "../components/DurationInsights";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -97,6 +98,9 @@ export function Admin() {
     if (!a.paymentId) return;
     await api.post(`/api/admin/payments/${a.paymentId}/mark-paid`, {}, { "x-admin-key": key }).catch((e) => alert(e instanceof Error ? e.message : "Couldn't mark paid.")); load();
   }
+  async function setActual(a: Appointment, minutes: number) {
+    await api.patch(`/api/admin/appointments/${a.id}`, { actualMinutes: minutes }, { "x-admin-key": key }).catch(() => {}); load();
+  }
   function logout() { localStorage.removeItem(KEY); setKey(""); setAuthed(false); setPerms([]); }
 
   if (checking) return <div className="p-16 text-center text-muted">Loading…</div>;
@@ -147,7 +151,7 @@ export function Admin() {
 
       {tab === "home" && <div className="mt-5"><DashboardHome adminKey={key} go={setTab as (t: string) => void} /></div>}
       {tab === "services" && <div className="mt-5"><CatalogAdmin adminKey={key} /></div>}
-      {tab === "calendar" && <div className="mt-5"><CalendarAdmin adminKey={key} /></div>}
+      {tab === "calendar" && <div className="mt-5"><DurationInsights adminKey={key} /><CalendarAdmin adminKey={key} /></div>}
       {tab === "staff" && <div className="mt-5"><StaffAdmin adminKey={key} /></div>}
       {tab === "website" && <div className="mt-5"><SiteContentAdmin adminKey={key} /></div>}
       {tab === "finances" && <div className="mt-5"><FinancesAdmin adminKey={key} /></div>}
@@ -200,6 +204,13 @@ export function Admin() {
                 {a.customerName} · <a href={`tel:${a.customerPhone}`} className="text-brand">{a.customerPhone}</a> · ${a.price}
                 {a.note ? ` · “${a.note}”` : ""}
               </p>
+              {a.status === "COMPLETED" && (
+                <div className="mt-2 flex items-center gap-2 text-xs">
+                  <span className="text-muted">Actual time:</span>
+                  <input type="number" defaultValue={a.actualMinutes || ""} onBlur={(e) => setActual(a, Number(e.target.value))} placeholder={String(a.durationMin)} className="input !w-20 !py-1 text-xs" />
+                  <span className="text-muted">min · scheduled {a.durationMin}m</span>
+                </div>
+              )}
               {(a.status === "CONFIRMED" || (a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId)) && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId && (
