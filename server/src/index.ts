@@ -368,6 +368,7 @@ function permForPath(p: string): string {
   if (p.endsWith("/admin/me") || p.endsWith("/alerts") || p.endsWith("/search")) return ""; // any authenticated principal
   if (p.includes("/analytics/customers")) return "bookings"; // customer insights live on the Customers tab
   if (p.includes("/analytics/marketing")) return "marketing"; // marketing dashboard lives on the Marketing tab
+  if (p.includes("/analytics/branches")) return "branches";
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements") || p.includes("/suppliers") || p.includes("/purchase-orders")) return "inventory";
@@ -507,6 +508,26 @@ app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
 // Admin audit trail (owner/managers with the "activity" permission).
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+});
+
+// Multi-branch comparison: bookings, revenue and profit per branch.
+app.get("/api/admin/analytics/branches", requireAdmin, async (_req, res) => {
+  const [branches, staff, appts] = await Promise.all([
+    prisma.branch.findMany({ orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }] }),
+    prisma.staff.findMany({ where: { isActive: true }, select: { branchId: true } }),
+    prisma.appointment.findMany({ where: { status: "COMPLETED" }, include: { service: { select: { materialCost: true } } } }),
+  ]);
+  const rowFor = (id: number | null, name: string, isDefault: boolean) => {
+    const mine = appts.filter((a) => a.branchId === id);
+    const revenue = round2(mine.reduce((s, a) => s + a.price, 0));
+    const commission = round2(mine.reduce((s, a) => s + a.commissionAmount, 0));
+    const material = round2(mine.reduce((s, a) => s + (a.service?.materialCost ?? 0), 0));
+    return { id, name, isDefault, staffCount: staff.filter((s) => s.branchId === id).length, bookings: mine.length, revenue, profit: round2(revenue - commission - material) };
+  };
+  const rows = branches.map((b) => rowFor(b.id, b.name, b.isDefault));
+  const unassigned = appts.filter((a) => a.branchId == null).length;
+  if (unassigned > 0) rows.push(rowFor(null, "Unassigned", false));
+  res.json(rows);
 });
 
 // Marketing dashboard: promo/campaign performance + customer acquisition.

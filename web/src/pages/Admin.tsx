@@ -32,6 +32,7 @@ import { GlobalSearch } from "../components/GlobalSearch";
 import { SuppliersAdmin } from "../components/SuppliersAdmin";
 import { StaffGoalsAdmin } from "../components/StaffGoalsAdmin";
 import { MarketingDashboard } from "../components/MarketingDashboard";
+import { BranchAnalytics } from "../components/BranchAnalytics";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -156,7 +157,7 @@ export function Admin() {
       {tab === "marketing" && <div className="mt-5"><MarketingDashboard adminKey={key} /><PromoAdmin adminKey={key} /></div>}
       {tab === "gallery" && <div className="mt-5"><GalleryAdmin adminKey={key} /></div>}
       {tab === "notifications" && <div className="mt-5"><NotificationsAdmin adminKey={key} /></div>}
-      {tab === "branches" && <div className="mt-5"><BranchesAdmin adminKey={key} /></div>}
+      {tab === "branches" && <div className="mt-5"><BranchAnalytics adminKey={key} /><BranchesAdmin adminKey={key} /></div>}
       {tab === "waitlist" && <div className="mt-5"><WaitlistAdmin adminKey={key} /></div>}
       {tab === "customers" && <div className="mt-5"><CustomersAdmin adminKey={key} /></div>}
       {tab === "giftcards" && <div className="mt-5"><GiftCardsAdmin adminKey={key} /></div>}
