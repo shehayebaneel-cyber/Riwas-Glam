@@ -367,6 +367,7 @@ const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", 
 function permForPath(p: string): string {
   if (p.endsWith("/admin/me") || p.endsWith("/alerts") || p.endsWith("/search")) return ""; // any authenticated principal
   if (p.includes("/analytics/customers")) return "bookings"; // customer insights live on the Customers tab
+  if (p.includes("/analytics/marketing")) return "marketing"; // marketing dashboard lives on the Marketing tab
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements") || p.includes("/suppliers") || p.includes("/purchase-orders")) return "inventory";
@@ -506,6 +507,25 @@ app.post("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
 // Admin audit trail (owner/managers with the "activity" permission).
 app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+});
+
+// Marketing dashboard: promo/campaign performance + customer acquisition.
+app.get("/api/admin/analytics/marketing", requireAdmin, async (_req, res) => {
+  const [promos, appts, customers] = await Promise.all([
+    prisma.promoCode.findMany({ orderBy: { usedCount: "desc" } }),
+    prisma.appointment.findMany({ where: { status: "COMPLETED", NOT: { promoCode: "" } }, select: { promoCode: true, price: true } }),
+    prisma.customer.findMany({ select: { createdAt: true } }),
+  ]);
+  const byCode: Record<string, { revenue: number; bookings: number }> = {};
+  for (const a of appts) { const c = a.promoCode; (byCode[c] ??= { revenue: 0, bookings: 0 }); byCode[c].revenue = round2(byCode[c].revenue + a.price); byCode[c].bookings++; }
+  const acq: Record<string, number> = {};
+  for (const c of customers) { const m = (c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)).toISOString().slice(0, 7); acq[m] = (acq[m] ?? 0) + 1; }
+  res.json({
+    promos: promos.map((p) => ({ code: p.code, description: p.description, type: p.type, value: p.value, uses: p.usedCount, maxUses: p.maxUses, active: p.isActive, revenue: byCode[p.code]?.revenue ?? 0, bookings: byCode[p.code]?.bookings ?? 0 })),
+    acquisition: Object.entries(acq).sort().slice(-6).map(([month, count]) => ({ month, count })),
+    totalPromoRevenue: round2(Object.values(byCode).reduce((s, v) => s + v.revenue, 0)),
+    totalRedemptions: promos.reduce((s, p) => s + p.usedCount, 0),
+  });
 });
 
 // ---- Staff monthly goals + progress ----
