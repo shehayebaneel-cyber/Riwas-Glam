@@ -109,6 +109,15 @@ async function releaseStaleWhishHolds() {
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, salon: SALON.name }));
 app.get("/api/info", (_req, res) => res.json({ name: SALON.name, hours: SALON.hours, slotStepMin: SALON.slotStepMin }));
+// Public, anonymous site-analytics beacon (no auth, no PII).
+const TRACK_TYPES = ["PAGE_VIEW", "SERVICE_VIEW", "BOOKING_STARTED", "BOOKING_COMPLETED", "CLICK", "GALLERY_VIEW"];
+app.post("/api/track", async (req, res) => {
+  const type = STR(req.body?.type, 24).toUpperCase();
+  if (!TRACK_TYPES.includes(type)) return res.status(204).end();
+  await prisma.analyticsEvent.create({ data: { type, label: STR(req.body?.label, 120), source: STR(req.body?.source, 80) } }).catch(() => {});
+  res.status(204).end();
+});
+
 // Public salon status — drives the site-wide banner + booking block during a temporary close.
 app.get("/api/status", async (_req, res) => { const e = await getSetting("emergencyClose", EMERGENCY_DEFAULT); res.json({ closed: !!e.closed, message: STR(e.message, 300) }); });
 app.get("/api/staff", async (_req, res) => {
@@ -370,6 +379,7 @@ function permForPath(p: string): string {
   if (p.includes("/analytics/marketing")) return "marketing"; // marketing dashboard lives on the Marketing tab
   if (p.includes("/analytics/branches")) return "branches";
   if (p.includes("/analytics/duration")) return "calendar";
+  if (p.includes("/analytics/web")) return "marketing";
   if (p.includes("/dashboard") || p.includes("/analytics") || p.includes("/expenses") || p.includes("/daily-closing") || p.includes("/cash-drawer")) return "finances";
   if (p.includes("/payouts")) return "payouts";
   if (p.includes("/recipe") || p.includes("/products") || p.includes("/inventory") || p.includes("/movements") || p.includes("/suppliers") || p.includes("/purchase-orders")) return "inventory";
@@ -539,6 +549,29 @@ app.get("/api/admin/analytics/branches", requireAdmin, async (_req, res) => {
   const unassigned = appts.filter((a) => a.branchId == null).length;
   if (unassigned > 0) rows.push(rowFor(null, "Unassigned", false));
   res.json(rows);
+});
+
+// In-house website analytics: traffic, top pages/services, booking funnel, sources.
+app.get("/api/admin/analytics/web", requireAdmin, async (req, res) => {
+  const days = Math.min(365, Math.max(1, Number((req.query as Record<string, string>).days) || 30));
+  const since = new Date(Date.now() - days * 86400000);
+  const events = await prisma.analyticsEvent.findMany({ where: { createdAt: { gte: since } }, select: { type: true, label: true, source: true } });
+  const count = (t: string) => events.filter((e) => e.type === t).length;
+  const topBy = (t: string, pick: (e: { label: string; source: string }) => string, n = 8) => {
+    const m: Record<string, number> = {};
+    for (const e of events) if (e.type === t) { const k = pick(e) || ""; if (k) m[k] = (m[k] ?? 0) + 1; }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n).map(([label, c]) => ({ label, count: c }));
+  };
+  const started = count("BOOKING_STARTED"), completed = count("BOOKING_COMPLETED");
+  res.json({
+    days, pageViews: count("PAGE_VIEW"),
+    topPages: topBy("PAGE_VIEW", (e) => e.label),
+    topServices: topBy("SERVICE_VIEW", (e) => e.label),
+    sources: topBy("PAGE_VIEW", (e) => e.source || "direct"),
+    clicks: topBy("CLICK", (e) => e.label),
+    bookingsStarted: started, bookingsCompleted: completed,
+    conversionRate: started ? Math.round((completed / started) * 100) : 0,
+  });
 });
 
 // Marketing dashboard: promo/campaign performance + customer acquisition.

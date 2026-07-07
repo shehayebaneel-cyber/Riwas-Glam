@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
+import { track } from "../lib/track";
 import { useCustomer } from "../context/CustomerAuth";
 import { useI18n } from "../context/I18n";
 import { WaitlistForm } from "../components/WaitlistForm";
@@ -41,6 +42,7 @@ export function Book() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    track("BOOKING_STARTED");
     api.get<Category[]>("/api/catalog").then((c) => {
       setCatalog(c);
       const pre = Number(params.get("service"));
@@ -99,6 +101,7 @@ export function Book() {
         if (r.redirectUrl) { window.location.href = r.redirectUrl; return; }
         navigate(`/payment/${r.reference}`); return;
       }
+      track("BOOKING_COMPLETED", payMethod);
       setDone({ date, time, staffName: r.appointment?.staffName ?? "", method: payMethod });
     } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Couldn't complete the booking."); } finally { setBusy(false); }
   }

@@ -283,6 +283,17 @@ model Setting {
   value String @default("")
 }
 
+// A lightweight, privacy-light site analytics event (no PII, no cookies).
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  type      String // PAGE_VIEW | SERVICE_VIEW | BOOKING_STARTED | BOOKING_COMPLETED | CLICK | GALLERY_VIEW
+  label     String   @default("")
+  source    String   @default("") // referrer host for PAGE_VIEW
+  createdAt DateTime @default(now())
+  @@index([type])
+  @@index([createdAt])
+}
+
 // A message on the internal team board (shared, most-recent-first).
 model InternalMessage {
   id        String   @id @default(cuid())

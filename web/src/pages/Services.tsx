@@ -5,6 +5,7 @@ import { Reveal } from "../components/Reveal";
 import { ServiceCard } from "../components/ServiceCard";
 import { SITE } from "../config";
 import { api, durationLabel, priceLabel } from "../lib/api";
+import { track } from "../lib/track";
 import { useI18n } from "../context/I18n";
 import type { Category, Service } from "../types";
 
@@ -59,6 +60,7 @@ export function Services() {
 function ServiceModal({ service, catName, onClose }: { service: Service; catName: string; onClose: () => void }) {
   const { t } = useI18n();
   const img = SITE.categoryImages[catName] ?? SITE.heroImage;
+  useEffect(() => { track("SERVICE_VIEW", service.name); }, [service.name]);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div className="w-full max-w-lg overflow-hidden rounded-t-[1.75rem] bg-surface shadow-2xl sm:rounded-[1.75rem]" onClick={(e) => e.stopPropagation()}>

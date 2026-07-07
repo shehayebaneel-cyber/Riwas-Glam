@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Routes, Route, useSearchParams } from "react-router-dom";
+import { Routes, Route, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "./lib/api";
+import { track } from "./lib/track";
 import { Home } from "./pages/Home";
 import { Book } from "./pages/Book";
 import { BookPackage } from "./pages/BookPackage";
@@ -18,6 +19,18 @@ const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin
 const StaffPortal = lazy(() => import("./pages/StaffPortal").then((m) => ({ default: m.StaffPortal })));
 const Account = lazy(() => import("./pages/Account").then((m) => ({ default: m.Account })));
 const GiftCards = lazy(() => import("./pages/GiftCards").then((m) => ({ default: m.GiftCards })));
+
+// Anonymous page-view tracking on every route change (skips admin/staff areas).
+function Tracker() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (pathname.startsWith("/admin") || pathname.startsWith("/staff")) return;
+    let src = "";
+    try { const r = document.referrer; if (r && !r.includes(window.location.host)) src = new URL(r).hostname; } catch { /* ignore */ }
+    track("PAGE_VIEW", pathname, src);
+  }, [pathname]);
+  return null;
+}
 
 // /book delegates to the package flow when ?package= is present, else the service flow.
 function BookRoute() {
@@ -41,6 +54,7 @@ export default function App() {
 
   return (
     <>
+      <Tracker />
       {status?.closed && <div className="bg-brand-dark px-4 py-2 text-center text-sm font-semibold text-white">{status.message || "We're temporarily closed for online bookings — please contact us. 💗"}</div>}
       <Suspense fallback={<div className="p-16 text-center text-muted">Loading…</div>}>
         <Routes>
