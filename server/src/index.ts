@@ -365,7 +365,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "riwa-admin";
 const ALL_PERMS = ["bookings", "waitlist", "calendar", "finances", "inventory", "payouts", "services", "team", "academy", "packages", "loyalty", "marketing", "notifications", "branches", "website", "giftcards", "reviews", "reports", "activity"];
 // Which permission a given admin API path requires (path-based enforcement).
 function permForPath(p: string): string {
-  if (p.endsWith("/admin/me") || p.endsWith("/alerts") || p.endsWith("/search")) return ""; // any authenticated principal
+  if (p.endsWith("/admin/me") || p.endsWith("/alerts") || p.endsWith("/search") || p.includes("/admin/messages")) return ""; // any authenticated principal
   if (p.includes("/analytics/customers")) return "bookings"; // customer insights live on the Customers tab
   if (p.includes("/analytics/marketing")) return "marketing"; // marketing dashboard lives on the Marketing tab
   if (p.includes("/analytics/branches")) return "branches";
@@ -433,7 +433,7 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (need && perms !== "*" && !perms.includes(need)) return res.status(403).json({ error: "You don't have access to this section." });
   (req as Request & { principal?: unknown }).principal = { perms, staffId, actorName };
   // Audit trail: record successful admin mutations (not logins or reads).
-  if (["POST", "PATCH", "PUT", "DELETE"].includes(req.method) && !req.path.endsWith("/login") && !req.path.includes("/activity")) {
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(req.method) && !req.path.endsWith("/login") && !req.path.includes("/activity") && !req.path.includes("/messages")) {
     const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
     res.on("finish", () => { if (res.statusCode < 400) logActivity({ actor: actorName, staffId, action: describeAction(req.method, req.path), detail: `${req.method} ${req.path}`, ip }); });
   }
@@ -702,6 +702,17 @@ app.post("/api/admin/settings/emergency", requireAdmin, async (req, res) => {
   await setSetting("emergencyClose", { closed, message });
   res.json({ closed, message });
 });
+
+// Internal team message board (shared; any authenticated staff can read/post).
+app.get("/api/admin/messages", requireAdmin, async (_req, res) => {
+  res.json(await prisma.internalMessage.findMany({ orderBy: { createdAt: "desc" }, take: 100 }));
+});
+app.post("/api/admin/messages", requireAdmin, async (req, res) => {
+  const body = STR(req.body?.body, 1000); if (!body) return res.status(400).json({ error: "Empty message." });
+  const author = STR((req as Request & { principal?: { actorName?: string } }).principal?.actorName, 80) || "Staff";
+  res.status(201).json(await prisma.internalMessage.create({ data: { author, body } }));
+});
+app.delete("/api/admin/messages/:id", requireAdmin, async (req, res) => { await prisma.internalMessage.delete({ where: { id: STR(req.params.id, 40) } }).catch(() => {}); res.json({ ok: true }); });
 
 // Unified alert center — everything that needs the owner's attention, in one place.
 app.get("/api/admin/alerts", requireAdmin, async (_req, res) => {

@@ -270,6 +270,15 @@ model Setting {
   value String @default("")
 }
 
+// A message on the internal team board (shared, most-recent-first).
+model InternalMessage {
+  id        String   @id @default(cuid())
+  author    String   @default("")
+  body      String
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
 // Monthly performance target for a staff member.
 model StaffGoal {
   id                 Int      @id @default(autoincrement())

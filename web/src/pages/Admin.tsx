@@ -25,6 +25,7 @@ import { BranchesAdmin } from "../components/BranchesAdmin";
 import { NewBookingModal } from "../components/NewBookingModal";
 import { PaymentsAdmin } from "../components/PaymentsAdmin";
 import { AlertsBell } from "../components/AlertsBell";
+import { MessagesButton } from "../components/MessagesButton";
 import { EmergencyControl } from "../components/EmergencyControl";
 import { ActivityAdmin } from "../components/ActivityAdmin";
 import { DayCloseAdmin } from "../components/DayCloseAdmin";
@@ -128,6 +129,7 @@ export function Admin() {
           <p className="text-sm text-muted">{me.name}{me.role && me.role !== "OWNER" ? ` · ${me.role.charAt(0) + me.role.slice(1).toLowerCase()}` : " · Manager dashboard"}</p>
         </div>
         <div className="flex items-center gap-2">
+          <MessagesButton adminKey={key} />
           <AlertsBell adminKey={key} onGo={(t) => { if (perms.includes(TAB_PERM[t as Tab] ?? "zzz")) setTab(t as Tab); }} />
           <button onClick={logout} className="btn btn-ghost px-3 py-2 text-sm">Log out</button>
         </div>
