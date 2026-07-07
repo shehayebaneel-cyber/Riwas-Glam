@@ -508,6 +508,33 @@ app.get("/api/admin/activity", requireAdmin, async (_req, res) => {
   res.json(await prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
 });
 
+// ---- Staff monthly goals + progress ----
+app.get("/api/admin/staff-goals", requireAdmin, async (req, res) => {
+  const month = STR((req.query as Record<string, string>).month, 7) || new Date().toISOString().slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "Invalid month." });
+  const [staff, goals, appts] = await Promise.all([
+    prisma.staff.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
+    prisma.staffGoal.findMany({ where: { month } }),
+    prisma.appointment.findMany({ where: { status: "COMPLETED", date: { startsWith: month } }, select: { staffId: true, price: true, commissionAmount: true } }),
+  ]);
+  res.json({ month, staff: staff.map((s) => {
+    const g = goals.find((x) => x.staffId === s.id);
+    const mine = appts.filter((a) => a.staffId === s.id);
+    return {
+      staffId: s.id, name: s.name,
+      revenueTarget: g?.revenueTarget ?? 0, appointmentsTarget: g?.appointmentsTarget ?? 0,
+      revenue: round2(mine.reduce((sum, a) => sum + a.price, 0)), appointments: mine.length,
+      commission: round2(mine.reduce((sum, a) => sum + a.commissionAmount, 0)),
+    };
+  }) });
+});
+app.post("/api/admin/staff-goals", requireAdmin, async (req, res) => {
+  const b = req.body ?? {}; const staffId = Number(b.staffId), month = STR(b.month, 7);
+  if (!staffId || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "Invalid goal." });
+  const data = { revenueTarget: Math.max(0, NUM(b.revenueTarget, 0)), appointmentsTarget: Math.max(0, Math.round(NUM(b.appointmentsTarget, 0))) };
+  res.json(await prisma.staffGoal.upsert({ where: { staffId_month: { staffId, month } }, create: { staffId, month, ...data }, update: data }));
+});
+
 // ---- Suppliers ----
 app.get("/api/admin/suppliers", requireAdmin, async (_req, res) => {
   const [suppliers, pos] = await Promise.all([

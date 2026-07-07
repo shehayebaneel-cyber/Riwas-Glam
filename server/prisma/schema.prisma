@@ -270,6 +270,17 @@ model Setting {
   value String @default("")
 }
 
+// Monthly performance target for a staff member.
+model StaffGoal {
+  id                 Int      @id @default(autoincrement())
+  staffId            Int
+  month              String // YYYY-MM
+  revenueTarget      Float    @default(0)
+  appointmentsTarget Int      @default(0)
+  createdAt          DateTime @default(now())
+  @@unique([staffId, month])
+}
+
 // A stock supplier the salon buys inventory from.
 model Supplier {
   id        Int      @id @default(autoincrement())
