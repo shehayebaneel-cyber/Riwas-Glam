@@ -5,20 +5,21 @@ import { track } from "./lib/track";
 import { Home } from "./pages/Home";
 import { Book } from "./pages/Book";
 import { BookPackage } from "./pages/BookPackage";
-import { Packages } from "./pages/Packages";
 import { Services } from "./pages/Services";
-import { Gallery } from "./pages/Gallery";
-import { Academy } from "./pages/Academy";
-import { Payment } from "./pages/Payment";
-import { Receipt } from "./pages/Receipt";
 import { WhatsAppIcon } from "./components/Icons";
 import { SITE } from "./config";
 
-// Lazy-loaded so the customer site doesn't ship the (large) admin + account code.
+// Core funnel (Home/Services/Book) ships eagerly; everything else is code-split
+// so the first paint stays light (esp. the admin, account, and qrcode-heavy pages).
 const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin })));
 const StaffPortal = lazy(() => import("./pages/StaffPortal").then((m) => ({ default: m.StaffPortal })));
 const Account = lazy(() => import("./pages/Account").then((m) => ({ default: m.Account })));
 const GiftCards = lazy(() => import("./pages/GiftCards").then((m) => ({ default: m.GiftCards })));
+const Packages = lazy(() => import("./pages/Packages").then((m) => ({ default: m.Packages })));
+const Gallery = lazy(() => import("./pages/Gallery").then((m) => ({ default: m.Gallery })));
+const Academy = lazy(() => import("./pages/Academy").then((m) => ({ default: m.Academy })));
+const Payment = lazy(() => import("./pages/Payment").then((m) => ({ default: m.Payment })));
+const Receipt = lazy(() => import("./pages/Receipt").then((m) => ({ default: m.Receipt })));
 
 // Anonymous page-view tracking on every route change (skips admin/staff areas).
 function Tracker() {
