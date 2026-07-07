@@ -1826,7 +1826,8 @@ app.post("/api/admin/customers/:id/notes", requireAdmin, async (req, res) => {
 app.delete("/api/admin/customers/:id/notes/:noteId", requireAdmin, async (req, res) => { await prisma.customerNote.delete({ where: { id: STR(req.params.noteId, 40) } }).catch(() => {}); res.json({ ok: true }); });
 app.post("/api/admin/customers/:id/photos", requireAdmin, async (req, res) => {
   const url = STR(req.body?.url, 600); if (!url) return res.status(400).json({ error: "No image." });
-  res.json(await prisma.customerPhoto.create({ data: { customerId: Number(req.params.id), url, label: STR(req.body?.label, 60) } }));
+  const kind = STR(req.body?.kind, 12).toUpperCase();
+  res.json(await prisma.customerPhoto.create({ data: { customerId: Number(req.params.id), url, label: STR(req.body?.label, 60), kind: ["PHOTO", "BEFORE", "AFTER", "DOCUMENT"].includes(kind) ? kind : "PHOTO" } }));
 });
 app.delete("/api/admin/customers/:id/photos/:photoId", requireAdmin, async (req, res) => { await prisma.customerPhoto.delete({ where: { id: String(req.params.photoId) } }).catch(() => {}); res.json({ ok: true }); });
 

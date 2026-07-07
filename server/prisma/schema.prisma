@@ -168,6 +168,7 @@ model CustomerPhoto {
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   url        String
   label      String   @default("")
+  kind       String   @default("PHOTO") // PHOTO | BEFORE | AFTER | DOCUMENT
   createdAt  DateTime @default(now())
 }
 

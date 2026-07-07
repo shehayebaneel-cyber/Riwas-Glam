@@ -11,7 +11,7 @@ type Profile = {
   appointments: { id: number; date: string; time: string; serviceName: string; staffName: string; price: number; status: string }[];
   giftCards: { code: string; initialValue: number; balance: number; status: string }[];
   redemptions: { id: string; rewardName: string; createdAt: string }[];
-  photos: { id: string; url: string; label: string }[];
+  photos: { id: string; url: string; label: string; kind?: string }[];
 };
 const money = (n: number) => "$" + (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const STATUS: Record<string, string> = { CONFIRMED: "text-emerald-600", COMPLETED: "text-brand-dark", CANCELLED: "text-red-500", NO_SHOW: "text-amber-600" };
@@ -65,6 +65,7 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
   const [tags, setTags] = useState<string[]>([]);
   const [thread, setThread] = useState<{ id: string; author: string; body: string; createdAt: string }[]>([]);
   const [newNote, setNewNote] = useState("");
+  const [photoKind, setPhotoKind] = useState("PHOTO");
   const loadNotes = () => api.get<{ id: string; author: string; body: string; createdAt: string }[]>(`/api/admin/customers/${id}/notes`, hdr).then(setThread).catch(() => {});
   const load = () => { api.get<Profile>(`/api/admin/customers/${id}`, hdr).then((d) => { setP(d); setNotes(d.notes); setBirthday(d.birthday); setTags(d.tags ?? []); }).catch(() => {}); loadNotes(); };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
@@ -73,7 +74,7 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
   async function saveInfo() { await api.patch(`/api/admin/customers/${id}`, { notes, birthday, tags }, hdr); setSaved(true); setTimeout(() => setSaved(false), 1500); }
   async function addNote() { if (!newNote.trim()) return; await api.post(`/api/admin/customers/${id}/notes`, { body: newNote.trim() }, hdr); setNewNote(""); loadNotes(); }
   async function delNote(nid: string) { await api.delete(`/api/admin/customers/${id}/notes/${nid}`, hdr); loadNotes(); }
-  async function addPhoto(url: string) { if (!url) return; await api.post(`/api/admin/customers/${id}/photos`, { url }, hdr); load(); }
+  async function addPhoto(url: string) { if (!url) return; await api.post(`/api/admin/customers/${id}/photos`, { url, kind: photoKind }, hdr); load(); }
   async function delPhoto(pid: string) { await api.delete(`/api/admin/customers/${id}/photos/${pid}`, hdr); load(); }
 
   return (
@@ -141,16 +142,25 @@ function ProfileModal({ id, hdr, adminKey, onClose }: { id: number; hdr: Record<
               )}
             </div>
 
-            {/* Before/after photos */}
-            <p className="mt-4 text-sm font-bold text-ink">Photos</p>
+            {/* Photos, before/after & documents */}
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm font-bold text-ink">Photos & documents</p>
+              <select value={photoKind} onChange={(e) => setPhotoKind(e.target.value)} className="input !w-auto !py-1 text-xs">
+                <option value="PHOTO">Photo</option>
+                <option value="BEFORE">Before</option>
+                <option value="AFTER">After</option>
+                <option value="DOCUMENT">Document</option>
+              </select>
+            </div>
             <div className="mt-1"><ImageUpload value="" onChange={addPhoto} adminKey={adminKey} /></div>
             {p.photos.length > 0 && (
               <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {p.photos.map((ph) => (
-                  <div key={ph.id} className="group relative aspect-square overflow-hidden rounded-xl border border-border">
+                  <a key={ph.id} href={ph.url} target="_blank" rel="noreferrer" className="group relative block aspect-square overflow-hidden rounded-xl border border-border">
                     <img src={ph.url} alt="" className="h-full w-full object-cover" />
-                    <button onClick={() => delPhoto(ph.id)} className="absolute right-1 top-1 rounded-full bg-black/50 px-1.5 text-xs text-white opacity-0 group-hover:opacity-100">✕</button>
-                  </div>
+                    {ph.kind && ph.kind !== "PHOTO" && <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 text-[9px] font-bold uppercase text-white">{ph.kind === "BEFORE" ? "Before" : ph.kind === "AFTER" ? "After" : "Doc"}</span>}
+                    <button onClick={(e) => { e.preventDefault(); delPhoto(ph.id); }} className="absolute right-1 top-1 rounded-full bg-black/50 px-1.5 text-xs text-white opacity-0 group-hover:opacity-100">✕</button>
+                  </a>
                 ))}
               </div>
             )}
