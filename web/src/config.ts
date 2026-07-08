@@ -1,5 +1,9 @@
 // All salon-specific branding & content lives here — change these to re-skin the
 // site for any salon. (Operating hours for booking live in server/src/config.ts.)
+// Flipped to true once the live site-content has been fetched, so the hero image can
+// wait for the real photo instead of flashing the built-in default on first paint.
+export const runtime = { contentLoaded: false };
+
 export const SITE = {
   name: "Riwa's Glam",
   logo: "/logo.svg", // header logo — clean traced vector (transparent gold), scales sharp at any size

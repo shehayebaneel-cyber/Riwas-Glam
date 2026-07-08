@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { SITE } from "../config";
 import { api } from "../lib/api";
 import { CatalogAdmin } from "../components/CatalogAdmin";
@@ -23,6 +23,7 @@ import { GalleryAdmin } from "../components/GalleryAdmin";
 import { NotificationsAdmin } from "../components/NotificationsAdmin";
 import { BranchesAdmin } from "../components/BranchesAdmin";
 import { NewBookingModal } from "../components/NewBookingModal";
+import { GiftCardPayModal } from "../components/GiftCardPayModal";
 import { PaymentsAdmin } from "../components/PaymentsAdmin";
 import { AlertsBell } from "../components/AlertsBell";
 import { MessagesButton } from "../components/MessagesButton";
@@ -75,8 +76,10 @@ export function Admin() {
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [items, setItems] = useState<Appointment[]>([]);
   const [newBooking, setNewBooking] = useState(false);
+  const [giftPayFor, setGiftPayFor] = useState<Appointment | null>(null);
   const [tab, setTab] = useState<Tab>("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const navigate = useNavigate();
 
   async function applyCred(cred: string): Promise<boolean> {
     try {
@@ -102,7 +105,12 @@ export function Admin() {
   async function loginOwner(e: FormEvent) { e.preventDefault(); setErr(""); const ok = await applyCred(pw); if (!ok && !err) setErr("Wrong password."); }
   async function loginStaff(e: FormEvent) {
     e.preventDefault(); setErr("");
-    try { const r = await api.post<{ token: string }>("/api/staff/login", { email, password: pw }); const ok = await applyCred(r.token); if (!ok && !err) setErr("No admin access for this account."); }
+    try {
+      const r = await api.post<{ token: string }>("/api/staff/login", { email, password: pw });
+      const ok = await applyCred(r.token);
+      // Valid staff, but no management access → send them to their own schedule instead of a dead-end.
+      if (!ok) { setErr(""); localStorage.setItem("staff-token", r.token); navigate("/staff"); }
+    }
     catch { setErr("Wrong email or password."); }
   }
   async function setStatus(a: Appointment, status: string) {
@@ -218,63 +226,79 @@ export function Admin() {
       {tab === "goals" && <div className="mt-5"><StaffGoalsAdmin adminKey={key} /></div>}
       {tab === "bookings" && (
         <>
-          <div className="mt-4 flex items-center justify-between gap-2">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <button onClick={() => setNewBooking(true)} className="btn btn-primary px-4 py-2 text-sm">+ New booking</button>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto !py-2 text-sm" />
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => setDate((d) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() - 1); return x.toLocaleDateString("en-CA"); })} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Previous day">‹</button>
+              <button onClick={() => setDate(new Date().toLocaleDateString("en-CA"))} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto !py-2 text-sm" />
+              <button onClick={() => setDate((d) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + 1); return x.toLocaleDateString("en-CA"); })} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Next day">›</button>
+            </div>
           </div>
           {newBooking && <NewBookingModal adminKey={key} onClose={() => setNewBooking(false)} onCreated={() => { setNewBooking(false); load(); }} />}
+          {giftPayFor && <GiftCardPayModal adminKey={key} appointment={giftPayFor} onClose={() => setGiftPayFor(null)} onPaid={() => { setGiftPayFor(null); load(); }} />}
           <div className="mt-3 grid grid-cols-3 gap-3">
             <Stat label="Appointments" value={active.length} />
             <Stat label="Completed" value={items.filter((a) => a.status === "COMPLETED").length} />
             <Stat label="Revenue (booked)" value={`$${active.reduce((s, a) => s + a.price, 0)}`} />
           </div>
 
-          <div className="mt-5 space-y-2">
+          <div className="mt-5 space-y-3">
             {items.length === 0 ? (
-              <div className="card p-10 text-center text-muted">No appointments on this day.</div>
+              <div className="card p-12 text-center text-muted">No appointments on this day.</div>
             ) : (
-              items.map((a) => (
-            <div key={a.id} className="card p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-lg font-bold text-brand-dark">{a.time}</span>
-                <span className="font-semibold text-ink">{a.serviceName}</span>
-                {a.staffName && <span className="text-sm text-muted">· {a.staffName}</span>}
-                {a.paymentStatus && <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${a.paymentStatus === "PAID" ? "bg-emerald-500/15 text-emerald-600" : a.paymentStatus === "PENDING" ? "bg-amber-400/15 text-amber-600" : "bg-surface-2 text-muted"}`}>{a.paymentMethod === "WHISH" ? "whish" : "cash"} · {a.paymentStatus === "PAID" ? "paid" : a.paymentStatus.toLowerCase()}</span>}
-                <span className={`${a.paymentStatus ? "" : "ml-auto"} rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE[a.status] ?? "bg-surface-2 text-muted"}`}>{a.status.replace("_", " ").toLowerCase()}</span>
-              </div>
-              <p className="mt-1 text-sm text-muted">
-                {a.customerName} · <a href={`tel:${a.customerPhone}`} className="text-brand">{a.customerPhone}</a> · ${a.price}
-                {a.note ? ` · “${a.note}”` : ""}
-              </p>
-              {a.customerPhone && (
-                <a href={waLink(a.customerPhone, (a.status === "COMPLETED" ? waMessages.thanks : waMessages.confirmation)({ customerName: a.customerName, serviceName: a.serviceName, date: a.date, time: a.time }))} target="_blank" rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#25D366]/12 px-3 py-1 text-xs font-bold text-[#128C4A] transition hover:bg-[#25D366]/20">
-                  💬 WhatsApp
-                </a>
-              )}
-              {a.status === "COMPLETED" && (
-                <div className="mt-2 flex items-center gap-2 text-xs">
-                  <span className="text-muted">Actual time:</span>
-                  <input type="number" defaultValue={a.actualMinutes || ""} onBlur={(e) => setActual(a, Number(e.target.value))} placeholder={String(a.durationMin)} className="input !w-20 !py-1 text-xs" />
-                  <span className="text-muted">min · scheduled {a.durationMin}m</span>
-                </div>
-              )}
-              {(a.status === "CONFIRMED" || (a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId)) && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId && (
-                    <button onClick={() => markPaid(a)} className="btn btn-ghost px-3 py-1.5 text-xs font-semibold text-emerald-600">💵 Mark paid</button>
-                  )}
-                  {a.status === "CONFIRMED" && (
-                    <>
-                      <button onClick={() => setStatus(a, "COMPLETED")} className="btn btn-ghost px-3 py-1.5 text-xs text-emerald-600">Mark done</button>
-                      <button onClick={() => setStatus(a, "NO_SHOW")} className="btn btn-ghost px-3 py-1.5 text-xs text-amber-600">No-show</button>
-                      <button onClick={() => setStatus(a, "CANCELLED")} className="btn btn-ghost px-3 py-1.5 text-xs text-red-500">Cancel</button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-              ))
+              items.map((a) => {
+                const bar = ({ CONFIRMED: "bg-emerald-400", COMPLETED: "bg-brand", CANCELLED: "bg-red-300", NO_SHOW: "bg-amber-400" } as Record<string, string>)[a.status] ?? "bg-surface-2";
+                return (
+                  <div key={a.id} className="card flex overflow-hidden !p-0">
+                    <div className={`w-1.5 shrink-0 ${bar}`} />
+                    <div className="flex w-[70px] shrink-0 flex-col items-center justify-center border-e border-border bg-surface-2/40 px-1 py-3 text-center">
+                      <span className="font-display text-lg font-extrabold leading-none text-brand-dark">{a.time}</span>
+                      <span className="mt-1 text-[10px] text-muted">{a.durationMin}m</span>
+                    </div>
+                    <div className="min-w-0 flex-1 p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-ink">{a.serviceName}</p>
+                          {a.staffName && <p className="text-xs text-muted">with {a.staffName}</p>}
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE[a.status] ?? "bg-surface-2 text-muted"}`}>{a.status.replace("_", " ").toLowerCase()}</span>
+                          {a.paymentStatus && <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${a.paymentStatus === "PAID" ? "bg-emerald-500/15 text-emerald-600" : a.paymentStatus === "PENDING" ? "bg-amber-400/15 text-amber-600" : "bg-surface-2 text-muted"}`}>{a.paymentMethod === "WHISH" ? "whish" : a.paymentMethod === "GIFTCARD" ? "🎀 gift" : "cash"} · {a.paymentStatus === "PAID" ? "paid" : a.paymentStatus.toLowerCase()}</span>}
+                        </div>
+                      </div>
+                      <p className="mt-2 text-sm text-muted"><span className="font-semibold text-ink">{a.customerName}</span> · <a href={`tel:${a.customerPhone}`} className="text-brand">{a.customerPhone}</a> · ${a.price}</p>
+                      {a.note && <p className="mt-0.5 text-xs italic text-muted">“{a.note}”</p>}
+                      {a.status === "COMPLETED" && (
+                        <div className="mt-2 flex items-center gap-2 text-xs">
+                          <span className="text-muted">Actual time:</span>
+                          <input type="number" defaultValue={a.actualMinutes || ""} onBlur={(e) => setActual(a, Number(e.target.value))} placeholder={String(a.durationMin)} className="input !w-20 !py-1 text-xs" />
+                          <span className="text-muted">min · sched {a.durationMin}m</span>
+                        </div>
+                      )}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {a.customerPhone && (
+                          <a href={waLink(a.customerPhone, (a.status === "COMPLETED" ? waMessages.thanks : waMessages.confirmation)({ customerName: a.customerName, serviceName: a.serviceName, date: a.date, time: a.time }))} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366]/12 px-3 py-1.5 text-xs font-bold text-[#128C4A] transition hover:bg-[#25D366]/20">💬 WhatsApp</a>
+                        )}
+                        {a.paymentStatus === "PENDING" && a.paymentMethod === "CASH" && a.paymentId && (
+                          <button onClick={() => markPaid(a)} className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-600 transition hover:bg-emerald-500/25">💵 Mark paid</button>
+                        )}
+                        {a.paymentStatus !== "PAID" && a.status !== "CANCELLED" && (
+                          <button onClick={() => setGiftPayFor(a)} className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand-dark transition hover:bg-brand-soft/70">🎀 Gift card</button>
+                        )}
+                        {a.status === "CONFIRMED" && (
+                          <>
+                            <button onClick={() => setStatus(a, "COMPLETED")} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/15">Mark done</button>
+                            <button onClick={() => setStatus(a, "NO_SHOW")} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-amber-600 transition hover:bg-amber-400/15">No-show</button>
+                            <button onClick={() => setStatus(a, "CANCELLED")} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/15">Cancel</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </>

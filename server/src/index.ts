@@ -872,6 +872,39 @@ app.post("/api/admin/payments/:id/mark-paid", requireAdmin, async (req, res) => 
   if (p.status === "PAID") return res.json(p);
   res.json(await markPaymentPaid(p));
 });
+// Pay a booking with a gift card: deducts the card balance, marks the booking paid,
+// and reports any cash remainder to collect. (Path enforces the "bookings" permission.)
+app.post("/api/admin/appointments/:id/pay-giftcard", requireAdmin, async (req, res) => {
+  const apptId = Number(req.params.id);
+  const code = STR(req.body?.code, 40).toUpperCase();
+  if (!code) return res.status(400).json({ error: "Enter a gift card code." });
+  const appt = await prisma.appointment.findUnique({ where: { id: apptId } });
+  if (!appt) return res.status(404).json({ error: "Booking not found." });
+  if (appt.status === "CANCELLED") return res.status(400).json({ error: "This booking is cancelled." });
+  if (appt.paymentStatus === "PAID") return res.status(400).json({ error: "This booking is already paid." });
+  const card = await prisma.giftCard.findUnique({ where: { code } });
+  if (!card) return res.status(404).json({ error: "No gift card with that code." });
+  if (card.status !== "ACTIVE" && card.status !== "REDEEMED") return res.status(400).json({ error: "This gift card isn't active." });
+  if (card.expiresAt && card.expiresAt.getTime() < Date.now()) return res.status(400).json({ error: "This gift card has expired." });
+  if (card.balance <= 0) return res.status(400).json({ error: "This gift card has no balance left." });
+
+  const price = round2(appt.price);
+  const gift = round2(Math.min(card.balance, price));
+  const cashRemainder = round2(price - gift);
+  const newBalance = round2(card.balance - gift);
+
+  await prisma.giftCard.update({ where: { id: card.id }, data: { balance: newBalance, status: newBalance <= 0 ? "REDEEMED" : "ACTIVE" } });
+
+  // Attach to the booking's payment (create one if it never had a payment record), then mark paid.
+  let payment = await prisma.payment.findFirst({ where: { appointmentId: apptId }, orderBy: { createdAt: "desc" } });
+  if (!payment) payment = await createPayment({ kind: "BOOKING", method: "GIFTCARD", amount: price, appointmentId: apptId, customerName: appt.customerName, customerEmail: appt.customerEmail, customerPhone: appt.customerPhone });
+  await prisma.payment.update({ where: { id: payment.id }, data: { method: "GIFTCARD", provider: "giftcard", providerRef: card.code } });
+  await prisma.appointment.update({ where: { id: apptId }, data: { paymentMethod: "GIFTCARD" } }).catch(() => {});
+  const fresh = await prisma.payment.findUnique({ where: { id: payment.id } });
+  if (fresh) await markPaymentPaid(fresh, { providerData: { giftCard: card.code, giftApplied: gift, cashRemainder } });
+
+  res.json({ ok: true, giftApplied: gift, cashRemainder, cardBalance: newBalance, cardCode: card.code, service: appt.serviceName });
+});
 // Cancel an unpaid payment (releases the booking hold / voids the pending gift card).
 app.post("/api/admin/payments/:id/cancel", requireAdmin, async (req, res) => {
   const p = await prisma.payment.findUnique({ where: { id: STR(req.params.id, 40) } });

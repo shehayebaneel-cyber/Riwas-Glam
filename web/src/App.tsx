@@ -6,7 +6,7 @@ import { Home } from "./pages/Home";
 import { Book } from "./pages/Book";
 import { BookPackage } from "./pages/BookPackage";
 import { Services } from "./pages/Services";
-import { SITE } from "./config";
+import { SITE, runtime } from "./config";
 
 // Core funnel (Home/Services/Book) ships eagerly; everything else is code-split
 // so the first paint stays light (esp. the admin, account, and qrcode-heavy pages).
@@ -32,6 +32,38 @@ function Tracker() {
   return null;
 }
 
+// Scroll to a #section when navigating to a hash (e.g. /#about, /#contact), retrying
+// until the target has rendered; otherwise scroll to the top on a plain route change.
+function ScrollManager() {
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    if (!hash) { window.scrollTo({ top: 0 }); return; }
+    const id = decodeURIComponent(hash.slice(1));
+    let cancelled = false;
+    // Coming from another page, the home content (images, API-loaded services/gallery)
+    // renders AFTER we navigate, pushing the target down. So keep snapping to it until
+    // its position has been stable for a few checks, or we hit the time cap.
+    let lastTop = Number.NaN, stable = 0, elapsed = 0;
+    const STEP = 100, MAX = 5000;
+    const loop = () => {
+      if (cancelled) return;
+      const el = document.getElementById(id);
+      if (el) {
+        const top = Math.round(el.getBoundingClientRect().top + window.scrollY);
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+        stable = Math.abs(top - lastTop) <= 1 ? stable + 1 : 0;
+        lastTop = top;
+        if (stable >= 4) return; // settled — stop re-aligning
+      }
+      elapsed += STEP;
+      if (elapsed < MAX) window.setTimeout(loop, STEP);
+    };
+    loop();
+    return () => { cancelled = true; };
+  }, [pathname, hash]);
+  return null;
+}
+
 // /book delegates to the package flow when ?package= is present, else the service flow.
 function BookRoute() {
   const [params] = useSearchParams();
@@ -47,15 +79,17 @@ export default function App() {
   const [status, setStatus] = useState<{ closed: boolean; message: string } | null>(null);
   useEffect(() => {
     api.get<Partial<typeof SITE>>("/api/site-content")
-      .then((c) => { Object.assign(SITE, c); bump((v) => v + 1); })
-      .catch(() => {});
+      .then((c) => { Object.assign(SITE, c); })
+      .catch(() => {})
+      .finally(() => { runtime.contentLoaded = true; bump((v) => v + 1); });
     api.get<{ closed: boolean; message: string }>("/api/status").then(setStatus).catch(() => {});
   }, []);
 
   return (
     <>
       <Tracker />
-      {status?.closed && <div className="bg-brand-dark px-4 py-2 text-center text-sm font-semibold text-white">{status.message || "We're temporarily closed for online bookings — please contact us. 💗"}</div>}
+      <ScrollManager />
+      {status?.closed &&<div className="bg-brand-dark px-4 py-2 text-center text-sm font-semibold text-white">{status.message || "We're temporarily closed for online bookings — please contact us. 💗"}</div>}
       <Suspense fallback={<div className="p-16 text-center text-muted">Loading…</div>}>
         <Routes>
           <Route path="/" element={<Home />} />

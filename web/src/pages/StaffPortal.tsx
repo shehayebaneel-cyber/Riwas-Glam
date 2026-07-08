@@ -1,42 +1,117 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { SITE } from "../config";
 import { api, money } from "../lib/api";
+import { NewBookingModal } from "../components/NewBookingModal";
+import { GiftCardPayModal } from "../components/GiftCardPayModal";
 import type { Appointment, DaySchedule } from "../types";
 
 const TKEY = "staff-token";
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_START = 8, DAY_END = 21, PXH = 56;          // calendar window 08:00–21:00, 56px/hour
+const GRID_H = (DAY_END - DAY_START) * PXH;
+const toMin = (t: string) => { const [h, m] = (t || "0:0").split(":").map(Number); return h * 60 + (m || 0); };
+const iso = (d: Date) => d.toLocaleDateString("en-CA");
+const fmtHour = (h: number) => (h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`);
+const fmtDay = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const BADGE: Record<string, string> = {
   CONFIRMED: "bg-emerald-500/15 text-emerald-600", COMPLETED: "bg-brand-soft text-brand-dark",
   CANCELLED: "bg-red-500/15 text-red-500", NO_SHOW: "bg-amber-400/15 text-amber-600",
 };
+const BLOCK: Record<string, string> = {
+  CONFIRMED: "bg-emerald-500/90 text-white", COMPLETED: "bg-brand text-white",
+  CANCELLED: "bg-red-300/70 text-white line-through", NO_SHOW: "bg-amber-400/90 text-white",
+};
+
+// Lay out a day's appointments, splitting overlapping ones into side-by-side columns.
+type Placed = { a: Appointment; top: number; height: number; leftPct: number; widthPct: number };
+function layoutDay(list: Appointment[]): Placed[] {
+  const items = list.map((a) => ({ a, start: toMin(a.time), end: toMin(a.time) + (a.durationMin || 30) }))
+    .sort((x, y) => x.start - y.start || x.end - y.end);
+  const placed: Placed[] = [];
+  let group: { a: Appointment; start: number; end: number; col: number }[] = [];
+  let groupEnd = -1;
+  const flush = () => {
+    if (group.length) {
+      const cols = Math.max(...group.map((g) => g.col)) + 1;
+      for (const g of group) {
+        placed.push({
+          a: g.a,
+          top: Math.max(0, (g.start - DAY_START * 60) * (PXH / 60)),
+          height: Math.max(24, (g.end - g.start) * (PXH / 60) - 2),
+          leftPct: (g.col / cols) * 100, widthPct: (1 / cols) * 100,
+        });
+      }
+    }
+    group = []; groupEnd = -1;
+  };
+  for (const it of items) {
+    if (group.length && it.start >= groupEnd) flush();
+    const used = new Set(group.filter((g) => g.end > it.start).map((g) => g.col));
+    let col = 0; while (used.has(col)) col++;
+    group.push({ ...it, col });
+    groupEnd = Math.max(groupEnd, it.end);
+  }
+  flush();
+  return placed;
+}
 
 export function StaffPortal() {
   const [token, setToken] = useState(() => localStorage.getItem(TKEY) ?? "");
   const [me, setMe] = useState<{ name: string; role: string; commissionPct: number; schedule: DaySchedule[] } | null>(null);
+  const [perms, setPerms] = useState<string[]>([]);
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
-  const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
-  const [appts, setAppts] = useState<Appointment[]>([]);
+  const [anchor, setAnchor] = useState(() => new Date());   // any day inside the shown week
+  const [byDate, setByDate] = useState<Record<string, Appointment[]>>({});
+  const [selected, setSelected] = useState<Appointment | null>(null);
+  const [newB, setNewB] = useState<{ date: string; time: string } | null>(null);
+  const [giftFor, setGiftFor] = useState<Appointment | null>(null);
   const H = { "x-staff-token": token };
+  const A = { "x-admin-key": token };                        // same token also authorises admin reads if the staff has permissions
+  const canSeeAll = perms.includes("bookings");              // receptionists/managers see the whole salon's schedule
+
+  const days = useMemo(() => {
+    const start = new Date(anchor); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - start.getDay());
+    return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
+  }, [anchor]);
+  const weekKey = days[0] ? iso(days[0]) : "";
 
   useEffect(() => {
     if (!token) { setChecking(false); return; }
-    api.get<typeof me>("/api/staff/me", H).then(setMe).catch(() => { localStorage.removeItem(TKEY); setToken(""); }).finally(() => setChecking(false));
+    Promise.all([
+      api.get<typeof me>("/api/staff/me", H),
+      api.get<{ permissions: string[] }>("/api/admin/me", A).catch(() => ({ permissions: [] as string[] })),
+    ]).then(([m, adm]) => { setMe(m); setPerms(adm.permissions || []); })
+      .catch(() => { localStorage.removeItem(TKEY); setToken(""); })
+      .finally(() => setChecking(false));
     // eslint-disable-next-line
   }, [token]);
 
-  const load = () => { if (token) api.get<Appointment[]>(`/api/staff/me/appointments?date=${date}`, H).then(setAppts).catch(() => {}); };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token, date]);
+  const loadWeek = () => {
+    if (!token) return;
+    const fetchDay = (d: Date) => canSeeAll
+      ? api.get<Appointment[]>(`/api/admin/appointments?date=${iso(d)}`, A)
+      : api.get<Appointment[]>(`/api/staff/me/appointments?date=${iso(d)}`, H);
+    Promise.all(days.map((d) => fetchDay(d).then((a) => [iso(d), a] as const).catch(() => [iso(d), [] as Appointment[]] as const)))
+      .then((entries) => setByDate(Object.fromEntries(entries)));
+  };
+  useEffect(() => { loadWeek(); /* eslint-disable-next-line */ }, [token, weekKey, canSeeAll]);
 
   async function login(e: FormEvent) {
     e.preventDefault(); setErr("");
     try { const r = await api.post<{ token: string }>("/api/staff/login", { email, password: pw }); localStorage.setItem(TKEY, r.token); setToken(r.token); }
     catch { setErr("Wrong email or password."); }
   }
-  function logout() { localStorage.removeItem(TKEY); setToken(""); setMe(null); }
-  const setStatus = (a: Appointment, status: string) => api.patch(`/api/staff/me/appointments/${a.id}`, { status }, H).then(load);
+  function logout() { localStorage.removeItem(TKEY); setToken(""); setMe(null); setPerms([]); }
+  const setStatus = (a: Appointment, status: string) => {
+    const req = canSeeAll
+      ? api.patch(`/api/admin/appointments/${a.id}`, { status }, A)
+      : api.patch(`/api/staff/me/appointments/${a.id}`, { status }, H);
+    return req.then(() => { setSelected(null); loadWeek(); });
+  };
 
   if (checking) return <div className="p-16 text-center text-muted">Loading…</div>;
 
@@ -56,55 +131,148 @@ export function StaffPortal() {
     );
   }
 
-  const dow = new Date(date + "T00:00:00").getDay();
-  const day = me.schedule?.[dow];
-  const off = !day || day.off;
-  const active = appts.filter((a) => a.status !== "CANCELLED");
+  const weekAppts = Object.values(byDate).flat();
+  const active = weekAppts.filter((a) => a.status !== "CANCELLED");
   const revenue = active.reduce((s, a) => s + a.price, 0);
   const commission = active.reduce((s, a) => s + (a.commissionAmount ?? 0), 0);
+  const completed = active.filter((a) => a.status === "COMPLETED").length;
+  const todayIso = iso(new Date());
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const shift = (n: number) => setAnchor((a) => { const d = new Date(a); d.setDate(d.getDate() + n * 7); return d; });
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-3 py-6 sm:px-5 sm:py-8">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-extrabold text-ink">Hi, {me.name} 👋</h1>
-          <p className="text-sm text-muted">{me.role}</p>
+          <p className="text-sm text-muted">{me.role}{canSeeAll ? " · all bookings" : ""}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto !py-2 text-sm" />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {canSeeAll && <Link to="/admin" onClick={() => localStorage.setItem("riwa-admin-key", token)} className="btn btn-ghost px-4 py-2 text-sm">⚙ Full dashboard</Link>}
+          {canSeeAll && <button onClick={() => setNewB({ date: todayIso, time: "" })} className="btn btn-primary px-4 py-2 text-sm">+ New booking</button>}
           <button onClick={logout} className="btn btn-ghost px-3 py-2 text-sm">Log out</button>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      {/* Week nav */}
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => shift(-1)} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Previous week">‹</button>
+          <button onClick={() => setAnchor(new Date())} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
+          <button onClick={() => shift(1)} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Next week">›</button>
+        </div>
+        <p className="text-sm font-semibold text-ink sm:text-base">{fmtDay(days[0])} – {fmtDay(days[6])}, {days[6].getFullYear()}</p>
+      </div>
+
+      {/* Week stats */}
+      <div className="mt-3 grid grid-cols-3 gap-3">
         <Stat label="Appointments" value={active.length} />
         <Stat label="Revenue" value={money(revenue)} />
-        <Stat label="Your commission" value={money(commission)} />
+        {canSeeAll ? <Stat label="Completed" value={completed} /> : <Stat label="Commission" value={money(commission)} />}
       </div>
 
-      <p className="mt-4 text-sm text-muted">{off ? "You're not scheduled to work this day." : `Working ${day!.open}–${day!.close}${day!.breakStart ? ` · break ${day!.breakStart}–${day!.breakEnd}` : ""}`}</p>
-
-      <div className="mt-3 space-y-2">
-        {appts.length === 0 ? (
-          <div className="card p-10 text-center text-muted">No appointments on this day.</div>
-        ) : appts.map((a) => (
-          <div key={a.id} className="card p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display text-lg font-bold text-brand-dark">{a.time}</span>
-              <span className="font-semibold text-ink">{a.serviceName}</span>
-              <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE[a.status] ?? "bg-surface-2 text-muted"}`}>{a.status.replace("_", " ").toLowerCase()}</span>
+      {/* Calendar grid (horizontally scrollable on mobile) */}
+      <div className="no-scrollbar mt-4 overflow-x-auto rounded-2xl border border-border bg-surface shadow-[0_18px_46px_-24px_rgba(176,104,127,0.32)]">
+        <div className="min-w-[760px]">
+          {/* Day headers */}
+          <div className="grid border-b border-border" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+            <div />
+            {days.map((d) => {
+              const isToday = iso(d) === todayIso;
+              const off = !canSeeAll && me.schedule?.[d.getDay()]?.off;
+              return (
+                <div key={iso(d)} className={`border-s border-border py-2 text-center ${isToday ? "bg-brand-soft/50" : ""}`}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{DOW[d.getDay()]}</p>
+                  <p className={`font-display text-lg font-extrabold ${isToday ? "text-brand" : "text-ink"}`}>{d.getDate()}</p>
+                  {off && <p className="text-[9px] uppercase tracking-wide text-muted/70">off</p>}
+                </div>
+              );
+            })}
+          </div>
+          {/* Time rows + day columns */}
+          <div className="grid" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+            {/* Time labels */}
+            <div className="relative" style={{ height: GRID_H }}>
+              {Array.from({ length: DAY_END - DAY_START }, (_, i) => (
+                <div key={i} className="absolute right-1.5 -translate-y-1/2 text-[10px] text-muted" style={{ top: i * PXH }}>{fmtHour(DAY_START + i)}</div>
+              ))}
             </div>
-            <p className="mt-1 text-sm text-muted">{a.customerName} · <a href={`tel:${a.customerPhone}`} className="text-brand">{a.customerPhone}</a> · {money(a.price)}{a.note ? ` · “${a.note}”` : ""}</p>
-            {a.status === "CONFIRMED" && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={() => setStatus(a, "COMPLETED")} className="btn btn-ghost px-3 py-1.5 text-xs text-emerald-600">Mark done</button>
-                <button onClick={() => setStatus(a, "NO_SHOW")} className="btn btn-ghost px-3 py-1.5 text-xs text-amber-600">No-show</button>
-                <button onClick={() => setStatus(a, "CANCELLED")} className="btn btn-ghost px-3 py-1.5 text-xs text-red-500">Cancel</button>
+            {/* Day columns */}
+            {days.map((d) => {
+              const isToday = iso(d) === todayIso;
+              return (
+                <div key={iso(d)} onClick={(e) => {
+                  if (!canSeeAll) return;
+                  const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
+                  const raw = DAY_START * 60 + Math.round((y / PXH * 60) / 15) * 15;
+                  const min = Math.max(DAY_START * 60, Math.min(DAY_END * 60 - 15, raw));
+                  const hh = String(Math.floor(min / 60)).padStart(2, "0");
+                  const mm = String(min % 60).padStart(2, "0");
+                  setNewB({ date: iso(d), time: hh + ":" + mm });
+                }}
+                  className={`relative border-s border-border ${isToday ? "bg-brand-soft/15" : ""} ${canSeeAll ? "cursor-pointer" : ""}`} style={{ height: GRID_H }}>
+                  {/* hour gridlines */}
+                  {Array.from({ length: DAY_END - DAY_START }, (_, i) => (
+                    <div key={i} className="absolute inset-x-0 border-t border-border/50" style={{ top: i * PXH }} />
+                  ))}
+                  {/* now line */}
+                  {isToday && nowMin >= DAY_START * 60 && nowMin <= DAY_END * 60 && (
+                    <div className="absolute inset-x-0 z-10 border-t-2 border-red-500" style={{ top: (nowMin - DAY_START * 60) * (PXH / 60) }}>
+                      <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
+                    </div>
+                  )}
+                  {/* appointments (overlap-aware) */}
+                  {layoutDay(byDate[iso(d)] ?? []).map(({ a, top, height, leftPct, widthPct }) => (
+                    <button key={a.id} onClick={(e) => { e.stopPropagation(); setSelected(a); }} style={{ top, height, left: `calc(${leftPct}% + 2px)`, width: `calc(${widthPct}% - 4px)` }}
+                      className={`absolute z-[5] overflow-hidden rounded-lg px-1.5 py-1 text-left shadow-sm transition hover:brightness-105 ${BLOCK[a.status] ?? "bg-surface-2 text-ink"}`}>
+                      <p className="truncate text-[10px] font-bold leading-tight">{a.time} · {a.serviceName}</p>
+                      <p className="truncate text-[10px] leading-tight opacity-90">{canSeeAll && a.staffName ? a.staffName : a.customerName}</p>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <p className="mt-2 text-center text-[11px] text-muted sm:hidden">← swipe the calendar sideways to see the whole week →</p>
+
+      {/* Appointment detail / actions */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setSelected(null)}>
+          <div className="w-full max-w-md rounded-t-3xl bg-surface p-6 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-display text-xl font-extrabold text-brand-dark">{selected.time} · {selected.serviceName}</p>
+                <p className="text-sm text-muted">{new Date(selected.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · {selected.durationMin} min</p>
+              </div>
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE[selected.status] ?? "bg-surface-2 text-muted"}`}>{selected.status.replace("_", " ").toLowerCase()}</span>
+            </div>
+            <div className="mt-4 space-y-1 text-sm">
+              <p className="text-ink"><span className="text-muted">Client:</span> {selected.customerName}</p>
+              <p className="text-ink"><span className="text-muted">Phone:</span> <a href={`tel:${selected.customerPhone}`} className="font-semibold text-brand">{selected.customerPhone}</a></p>
+              {canSeeAll && selected.staffName && <p className="text-ink"><span className="text-muted">With:</span> {selected.staffName}</p>}
+              <p className="text-ink"><span className="text-muted">Price:</span> {money(selected.price)}</p>
+              {selected.note && <p className="text-ink"><span className="text-muted">Note:</span> “{selected.note}”</p>}
+            </div>
+            {selected.status === "CONFIRMED" && (
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                <button onClick={() => setStatus(selected, "COMPLETED")} className="rounded-xl bg-emerald-500/15 py-2.5 text-sm font-semibold text-emerald-600 transition active:scale-95">Done</button>
+                <button onClick={() => setStatus(selected, "NO_SHOW")} className="rounded-xl bg-amber-400/15 py-2.5 text-sm font-semibold text-amber-600 transition active:scale-95">No-show</button>
+                <button onClick={() => setStatus(selected, "CANCELLED")} className="rounded-xl bg-red-500/15 py-2.5 text-sm font-semibold text-red-500 transition active:scale-95">Cancel</button>
               </div>
             )}
+            {canSeeAll && selected.paymentStatus !== "PAID" && selected.status !== "CANCELLED" && (
+              <button onClick={() => setGiftFor(selected)} className="mt-3 w-full rounded-xl bg-brand-soft py-2.5 text-sm font-semibold text-brand-dark transition active:scale-[0.98]">🎀 Pay with gift card</button>
+            )}
+            <button onClick={() => setSelected(null)} className="mt-3 w-full rounded-xl bg-surface-2 py-2.5 text-sm font-semibold text-ink transition active:scale-[0.98]">Close</button>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {newB && <NewBookingModal adminKey={token} defaultDate={newB.date} defaultTime={newB.time} onClose={() => setNewB(null)} onCreated={() => { setNewB(null); loadWeek(); }} />}
+      {giftFor && <GiftCardPayModal adminKey={token} appointment={giftFor} onClose={() => setGiftFor(null)} onPaid={() => { setGiftFor(null); setSelected(null); loadWeek(); }} />}
     </div>
   );
 }

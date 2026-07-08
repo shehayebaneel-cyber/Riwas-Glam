@@ -4,7 +4,7 @@ import { Layout } from "../components/Layout";
 import { ServiceCard } from "../components/ServiceCard";
 import { AvailabilityWidget } from "../components/AvailabilityWidget";
 import { InstagramIcon, PhoneIcon, PinIcon, WhatsAppIcon } from "../components/Icons";
-import { SITE } from "../config";
+import { SITE, runtime } from "../config";
 import { api } from "../lib/api";
 import { useI18n } from "../context/I18n";
 import type { Category, Review, Service, Staff } from "../types";
@@ -15,6 +15,7 @@ export function Home() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [reviews, setReviews] = useState<{ avg: number; count: number; items: Review[] } | null>(null);
   const [gallery, setGallery] = useState<string[]>([]);
+  const [heroLoaded, setHeroLoaded] = useState(false);
   useEffect(() => {
     api.get<Category[]>("/api/catalog").then(setCatalog).catch(() => {});
     api.get<Staff[]>("/api/staff").then(setStaff).catch(() => {});
@@ -50,27 +51,29 @@ export function Home() {
             <div><AvailabilityWidget /></div>
           </div>
           <div>
+            {runtime.contentLoaded && (<>
             {/* Mobile / tablet: show the ENTIRE image (no crop) in a clean rounded card */}
             <div className="lg:hidden">
-              <div className="w-full rounded-3xl border border-brand-soft bg-surface p-3 shadow-[0_8px_24px_-16px_rgba(176,104,127,0.3)]">
-                <img src={SITE.heroImage} alt="Riwa's Glam" className="mx-auto max-h-[260px] w-full rounded-2xl object-contain" />
+              <div className={`w-full rounded-3xl border border-brand-soft bg-surface p-3 shadow-[0_8px_24px_-16px_rgba(176,104,127,0.3)] transition-opacity duration-700 ${heroLoaded ? "opacity-100" : "opacity-0"}`}>
+                <img src={SITE.heroImage} alt="Riwa's Glam" ref={(el) => { if (el?.complete) setHeroLoaded(true); }} onLoad={() => setHeroLoaded(true)} onError={() => setHeroLoaded(true)} className="mx-auto max-h-[260px] w-full rounded-2xl object-contain" />
               </div>
             </div>
-            {/* Desktop: full-bleed cover hero with floating badge (unchanged) */}
-            <div className="relative hidden lg:block">
+            {/* Desktop: full-bleed cover hero with floating badge — fades in once the photo loads */}
+            <div className={`relative hidden transition-opacity duration-700 lg:block ${heroLoaded ? "opacity-100" : "opacity-0"}`}>
               <div className="absolute -inset-4 rounded-[2.75rem] bg-gradient-to-br from-brand-soft via-brand-soft/60 to-accent/25 blur-xl" />
-              <img src={SITE.heroImage} alt="Riwa's Glam" className="relative h-[24rem] w-full rounded-[2.25rem] object-cover shadow-xl ring-4 ring-white/70 sm:h-[32rem]" />
+              <img src={SITE.heroImage} alt="Riwa's Glam" ref={(el) => { if (el?.complete) setHeroLoaded(true); }} onLoad={() => setHeroLoaded(true)} onError={() => setHeroLoaded(true)} className="relative h-[24rem] w-full rounded-[2.25rem] object-cover shadow-xl ring-4 ring-white/70 sm:h-[32rem]" />
               <div className="absolute -bottom-5 -left-5 rounded-2xl bg-surface px-5 py-3 shadow-lg">
                 <p className="font-display text-lg font-bold text-brand">Riwa's Glam</p>
                 <p className="text-xs text-muted">{SITE.tagline}</p>
               </div>
             </div>
+            </>)}
           </div>
         </div>
       </section>
 
       {/* Featured services — swipeable on mobile, grid on larger screens */}
-      <section id="services" className="py-16 sm:py-28">
+      <section id="services" className="scroll-mt-24 py-16 sm:py-28">
         <div className="mx-auto max-w-6xl px-5 text-center sm:px-4">
           <p className="eyebrow">{t("Signature")}</p>
           <h2 className="mt-2 font-display text-[1.9rem] font-extrabold text-ink sm:text-4xl">{t("Featured services")}</h2>
@@ -106,7 +109,7 @@ export function Home() {
       </section>
 
       {/* Gallery */}
-      <section id="gallery" className="bg-surface-2">
+      <section id="gallery" className="scroll-mt-24 bg-surface-2">
         <div className="section">
           <div className="text-center">
             <p className="eyebrow">{t("Our work")}</p>
@@ -150,7 +153,7 @@ export function Home() {
       )}
 
       {/* About / Team */}
-      <section id="about" className="section">
+      <section id="about" className="scroll-mt-24 section">
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div>
             <p className="eyebrow">{t("About us")}</p>
@@ -187,7 +190,7 @@ export function Home() {
       </section>
 
       {/* Contact / Hours */}
-      <section id="contact" className="bg-surface-2">
+      <section id="contact" className="scroll-mt-24 bg-surface-2">
         <div className="section grid gap-10 lg:grid-cols-2">
           <div>
             <p className="eyebrow">{t("Visit us")}</p>

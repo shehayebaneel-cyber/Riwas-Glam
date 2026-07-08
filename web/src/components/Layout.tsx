@@ -30,7 +30,7 @@ function NavItem({ to, label, hash = false }: { to: string; label: string; hash?
   const active = !hash && (to === "/" ? pathname === "/" : pathname.startsWith(to));
   const cls = `group relative whitespace-nowrap py-1 text-[15px] font-medium tracking-wide transition-all duration-300 ease-out hover:-translate-y-px ${active ? "text-brand" : "text-ink/70 hover:text-brand"}`;
   const bar = <span className={`pointer-events-none absolute inset-x-0 -bottom-1 h-[1.5px] origin-center rounded-full bg-brand transition-transform duration-300 ease-out ${active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`} />;
-  return hash ? <a href={to} className={cls}>{label}{bar}</a> : <Link to={to} className={cls}>{label}{bar}</Link>;
+  return <Link to={to} className={cls}>{label}{bar}</Link>;
 }
 
 function Nav() {
@@ -103,9 +103,7 @@ function Nav() {
               {menuLinks.map((l) => {
                 const cls = "flex items-center justify-between rounded-2xl px-4 py-3.5 text-lg font-semibold text-ink transition active:scale-[0.98] active:bg-surface-2";
                 const arrow = <span className="text-brand/45">›</span>;
-                return l.hash
-                  ? <a key={l.to} href={l.to} onClick={() => setOpen(false)} className={cls}>{l.label}{arrow}</a>
-                  : <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className={cls}>{l.label}{arrow}</Link>;
+                return <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className={cls}>{l.label}{arrow}</Link>;
               })}
               <Link to="/account" onClick={() => setOpen(false)} className="flex items-center justify-between rounded-2xl px-4 py-3.5 text-lg font-semibold text-brand transition active:scale-[0.98] active:bg-surface-2">{customer ? customer.name.split(" ")[0] : t("Log in")}<span className="text-brand/45">›</span></Link>
             </nav>

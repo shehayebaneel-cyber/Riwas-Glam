@@ -4,13 +4,13 @@ import type { Category, Staff } from "../types";
 
 type Pkg = { id: number; title: string };
 
-export function NewBookingModal({ adminKey, onClose, onCreated }: { adminKey: string; onClose: () => void; onCreated: () => void }) {
+export function NewBookingModal({ adminKey, onClose, onCreated, defaultDate, defaultTime, defaultStaffId }: { adminKey: string; onClose: () => void; onCreated: () => void; defaultDate?: string; defaultTime?: string; defaultStaffId?: string }) {
   const hdr = { "x-admin-key": adminKey };
   const [catalog, setCatalog] = useState<Category[]>([]);
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const today = new Date().toLocaleDateString("en-CA");
-  const [f, setF] = useState({ kind: "service", serviceId: "", packageId: "", staffId: "", date: today, time: "", customerName: "", customerPhone: "", customerEmail: "", note: "" });
+  const [f, setF] = useState({ kind: "service", serviceId: "", packageId: "", staffId: defaultStaffId ?? "", date: defaultDate || today, time: defaultTime || "", customerName: "", customerPhone: "", customerEmail: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const set = (k: string, v: string) => setF({ ...f, [k]: v });
