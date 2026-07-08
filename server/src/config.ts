@@ -5,12 +5,12 @@ export const SALON = {
   slotStepMin: 30, // booking grid granularity
   leadMin: 30, // can't book a slot starting within this many minutes from now
   hours: [
-    { closed: false, open: "11:00", close: "18:00" }, // Sun
+    { closed: false, open: "08:00", close: "20:00" }, // Sun
     { closed: true, open: "", close: "" }, // Mon (closed)
-    { closed: false, open: "10:00", close: "19:00" }, // Tue
-    { closed: false, open: "10:00", close: "19:00" }, // Wed
-    { closed: false, open: "10:00", close: "19:00" }, // Thu
-    { closed: false, open: "10:00", close: "20:00" }, // Fri
-    { closed: false, open: "10:00", close: "20:00" }, // Sat
+    { closed: false, open: "08:00", close: "20:00" }, // Tue
+    { closed: false, open: "08:00", close: "20:00" }, // Wed
+    { closed: false, open: "08:00", close: "20:00" }, // Thu
+    { closed: false, open: "08:00", close: "20:00" }, // Fri
+    { closed: false, open: "08:00", close: "20:00" }, // Sat
   ] as { closed: boolean; open: string; close: string }[],
 };

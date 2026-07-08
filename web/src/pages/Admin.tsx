@@ -36,6 +36,8 @@ import { MarketingDashboard } from "../components/MarketingDashboard";
 import { WebAnalytics } from "../components/WebAnalytics";
 import { BranchAnalytics } from "../components/BranchAnalytics";
 import { DurationInsights } from "../components/DurationInsights";
+import { WhatsAppBroadcast } from "../components/WhatsAppBroadcast";
+import { waLink, waMessages } from "../lib/whatsapp";
 import type { Appointment } from "../types";
 
 const KEY = "riwa-admin-key";
@@ -47,7 +49,17 @@ const BADGE: Record<string, string> = {
 };
 
 type Tab = "home" | "bookings" | "payments" | "customers" | "calendar" | "services" | "staff" | "giftcards" | "reviews" | "reports" | "website" | "finances" | "inventory" | "payouts" | "academy" | "packages" | "loyalty" | "waitlist" | "marketing" | "gallery" | "notifications" | "branches" | "activity" | "dayclose" | "suppliers" | "goals";
-const TABS: [Tab, string][] = [["home", "🏠 Home"], ["bookings", "Bookings"], ["payments", "Payments"], ["waitlist", "Waitlist"], ["customers", "Customers"], ["calendar", "Calendar"], ["finances", "Finances"], ["dayclose", "Day close"], ["inventory", "Inventory"], ["suppliers", "Suppliers"], ["payouts", "Payouts"], ["services", "Services"], ["staff", "Team"], ["goals", "Goals"], ["academy", "Academy"], ["packages", "Packages"], ["loyalty", "Loyalty"], ["marketing", "Marketing"], ["gallery", "Gallery"], ["notifications", "Notifications"], ["branches", "Branches"], ["website", "Website"], ["giftcards", "Gift cards"], ["reviews", "Reviews"], ["reports", "Reports"], ["activity", "Activity"]];
+// Sidebar navigation, grouped like a real business console. Each tuple is [tab, label, icon].
+// Every tab lives in exactly one group so nothing is ever lost as features grow.
+const NAV: { group: string; items: [Tab, string, string][] }[] = [
+  { group: "Daily", items: [["home", "Home", "🏠"], ["bookings", "Bookings", "📅"], ["calendar", "Calendar", "🗓️"], ["waitlist", "Waitlist", "⏳"]] },
+  { group: "Business", items: [["payments", "Payments", "💳"], ["finances", "Finances", "📊"], ["dayclose", "Day close", "🔐"], ["payouts", "Payouts", "💸"], ["reports", "Reports", "📈"]] },
+  { group: "Management", items: [["services", "Services", "✨"], ["packages", "Packages", "🎁"], ["staff", "Team", "👥"], ["goals", "Goals", "🎯"], ["customers", "Customers", "🙋"], ["inventory", "Inventory", "📦"], ["suppliers", "Suppliers", "🚚"]] },
+  { group: "Growth", items: [["loyalty", "Loyalty", "💖"], ["marketing", "Marketing", "📣"], ["giftcards", "Gift cards", "🎀"], ["reviews", "Reviews", "⭐"], ["notifications", "Notifications", "🔔"]] },
+  { group: "Website", items: [["website", "Website", "🌐"], ["gallery", "Gallery", "🖼️"], ["academy", "Academy", "🎓"], ["branches", "Branches", "🏬"], ["activity", "Activity", "📝"]] },
+];
+const NAV_ITEMS: [Tab, string][] = NAV.flatMap((g) => g.items.map(([t, l]) => [t, l] as [Tab, string]));
+const TAB_LABEL: Record<string, string> = Object.fromEntries(NAV_ITEMS);
 const TAB_PERM: Record<Tab, string> = { home: "finances", bookings: "bookings", payments: "bookings", customers: "bookings", waitlist: "waitlist", calendar: "calendar", finances: "finances", dayclose: "finances", inventory: "inventory", suppliers: "inventory", payouts: "payouts", services: "services", staff: "team", goals: "team", academy: "academy", packages: "packages", loyalty: "loyalty", marketing: "marketing", gallery: "website", notifications: "notifications", branches: "branches", website: "website", giftcards: "giftcards", reviews: "reviews", reports: "reports", activity: "activity" };
 
 export function Admin() {
@@ -64,6 +76,7 @@ export function Admin() {
   const [items, setItems] = useState<Appointment[]>([]);
   const [newBooking, setNewBooking] = useState(false);
   const [tab, setTab] = useState<Tab>("home");
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   async function applyCred(cred: string): Promise<boolean> {
     try {
@@ -80,7 +93,7 @@ export function Admin() {
     // eslint-disable-next-line
   }, []);
 
-  const visible = TABS.filter(([t]) => perms.includes(TAB_PERM[t]));
+  const visible = NAV_ITEMS.filter(([t]) => perms.includes(TAB_PERM[t]));
   useEffect(() => { if (authed && visible.length && !perms.includes(TAB_PERM[tab])) setTab(visible[0][0]); /* eslint-disable-next-line */ }, [authed, perms.join()]);
 
   const load = () => { if (authed && perms.includes("bookings")) api.get<Appointment[]>(`/api/admin/appointments?date=${date}`, { "x-admin-key": key }).then(setItems).catch(() => {}); };
@@ -135,31 +148,42 @@ export function Admin() {
   }
 
   const active = items.filter((a) => a.status !== "CANCELLED");
+  const pick = (t: Tab) => { setTab(t); setDrawerOpen(false); };
+  const searchGo = (t: string) => { if (perms.includes(TAB_PERM[t as Tab] ?? "zzz")) pick(t as Tab); };
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold text-ink">{SITE.name}</h1>
-          <p className="text-sm text-muted">{me.name}{me.role && me.role !== "OWNER" ? ` · ${me.role.charAt(0) + me.role.slice(1).toLowerCase()}` : " · Manager dashboard"}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <MessagesButton adminKey={key} />
-          <AlertsBell adminKey={key} onGo={(t) => { if (perms.includes(TAB_PERM[t as Tab] ?? "zzz")) setTab(t as Tab); }} />
-          <button onClick={logout} className="btn btn-ghost px-3 py-2 text-sm">Log out</button>
-        </div>
+    <div className="min-h-screen bg-surface-2/30 lg:flex">
+      {/* Desktop sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-e border-border lg:block">
+        <AdminSidebar perms={perms} tab={tab} onPick={pick} adminKey={key} me={me} onLogout={logout} onSearch={searchGo} />
+      </aside>
+
+      {/* Mobile / tablet slide-out drawer */}
+      <div className={`fixed inset-0 z-50 lg:hidden ${drawerOpen ? "" : "pointer-events-none"}`}>
+        <div onClick={() => setDrawerOpen(false)} className={`absolute inset-0 bg-ink/40 backdrop-blur-sm transition-opacity duration-300 ${drawerOpen ? "opacity-100" : "opacity-0"}`} />
+        <aside className={`absolute inset-y-0 start-0 w-72 max-w-[85%] border-e border-border shadow-2xl transition-transform duration-300 ease-out ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          <AdminSidebar perms={perms} tab={tab} onPick={pick} adminKey={key} me={me} onLogout={logout} onSearch={searchGo} />
+        </aside>
       </div>
 
-      <div className="mt-4"><GlobalSearch adminKey={key} onGo={(t) => { if (perms.includes(TAB_PERM[t as Tab] ?? "zzz")) setTab(t as Tab); }} /></div>
+      {/* Main column */}
+      <main className="min-w-0 flex-1">
+        {/* Top app bar (hamburger on mobile, page title, quick actions) */}
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md">
+          <button onClick={() => setDrawerOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-xl text-xl text-ink transition active:scale-95 hover:bg-surface-2 lg:hidden" aria-label="Open menu">☰</button>
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-lg font-extrabold text-ink sm:text-xl">{TAB_LABEL[tab] ?? SITE.name}</h1>
+            <p className="hidden truncate text-xs text-muted sm:block">{me.name}{me.role && me.role !== "OWNER" ? ` · ${me.role.charAt(0) + me.role.slice(1).toLowerCase()}` : " · Manager dashboard"}</p>
+          </div>
+          <div className="ms-auto flex items-center gap-2">
+            <MessagesButton adminKey={key} />
+            <AlertsBell adminKey={key} onGo={searchGo} />
+          </div>
+        </div>
 
-      <div className="no-scrollbar mt-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
-        {visible.map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold ${tab === t ? "bg-brand text-white" : "text-muted"}`}>{label}</button>
-        ))}
-      </div>
-
-      {perms.includes("website") && <div className="mt-4"><EmergencyControl adminKey={key} /></div>}
-      {me.role === "OWNER" && (
-        <div className="mt-3 rounded-2xl border border-border bg-surface p-3">
+        <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      {tab === "home" && perms.includes("website") && <div className="mb-4"><EmergencyControl adminKey={key} /></div>}
+      {tab === "home" && me.role === "OWNER" && (
+        <div className="mb-4 rounded-2xl border border-border bg-surface p-3">
           <div className="flex items-center justify-between gap-3">
             <div><p className="text-sm font-bold text-ink">Data backup</p><p className="text-xs text-muted">Your database is continuously backed up by the host. Download a manual JSON copy anytime.</p></div>
             <button onClick={downloadBackup} className="btn btn-ghost shrink-0 px-4 py-2 text-sm">Download</button>
@@ -178,7 +202,7 @@ export function Admin() {
       {tab === "academy" && <div className="mt-5"><AcademyAdmin adminKey={key} /></div>}
       {tab === "packages" && <div className="mt-5"><PackagesAdmin adminKey={key} /></div>}
       {tab === "loyalty" && <div className="mt-5"><LoyaltyAdmin adminKey={key} /></div>}
-      {tab === "marketing" && <div className="mt-5"><MarketingDashboard adminKey={key} /><WebAnalytics adminKey={key} /><PromoAdmin adminKey={key} /></div>}
+      {tab === "marketing" && <div className="mt-5 space-y-5"><WhatsAppBroadcast adminKey={key} /><MarketingDashboard adminKey={key} /><WebAnalytics adminKey={key} /><PromoAdmin adminKey={key} /></div>}
       {tab === "gallery" && <div className="mt-5"><GalleryAdmin adminKey={key} /></div>}
       {tab === "notifications" && <div className="mt-5"><NotificationsAdmin adminKey={key} /></div>}
       {tab === "branches" && <div className="mt-5"><BranchAnalytics adminKey={key} /><BranchesAdmin adminKey={key} /></div>}
@@ -222,6 +246,12 @@ export function Admin() {
                 {a.customerName} · <a href={`tel:${a.customerPhone}`} className="text-brand">{a.customerPhone}</a> · ${a.price}
                 {a.note ? ` · “${a.note}”` : ""}
               </p>
+              {a.customerPhone && (
+                <a href={waLink(a.customerPhone, (a.status === "COMPLETED" ? waMessages.thanks : waMessages.confirmation)({ customerName: a.customerName, serviceName: a.serviceName, date: a.date, time: a.time }))} target="_blank" rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#25D366]/12 px-3 py-1 text-xs font-bold text-[#128C4A] transition hover:bg-[#25D366]/20">
+                  💬 WhatsApp
+                </a>
+              )}
               {a.status === "COMPLETED" && (
                 <div className="mt-2 flex items-center gap-2 text-xs">
                   <span className="text-muted">Actual time:</span>
@@ -249,6 +279,69 @@ export function Admin() {
           </div>
         </>
       )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function AdminSidebar({ perms, tab, onPick, adminKey, me, onLogout, onSearch }: {
+  perms: string[]; tab: Tab; onPick: (t: Tab) => void; adminKey: string;
+  me: { role: string; name: string }; onLogout: () => void; onSearch: (t: string) => void;
+}) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const roleLabel = me.role && me.role !== "OWNER" ? me.role.charAt(0) + me.role.slice(1).toLowerCase() : "Owner";
+  return (
+    <div className="flex h-full flex-col bg-surface">
+      {/* Brand */}
+      <div className="flex items-center gap-2.5 px-5 py-4">
+        {SITE.logo
+          ? <img src={SITE.logo} alt={SITE.name} className="h-9 w-auto" />
+          : <span className="font-display text-lg font-extrabold text-ink">{SITE.name}</span>}
+      </div>
+      {/* Search */}
+      <div className="px-3 pb-3"><GlobalSearch adminKey={adminKey} onGo={onSearch} /></div>
+      {/* Grouped nav */}
+      <nav className="no-scrollbar flex-1 overflow-y-auto px-3 pb-4">
+        {NAV.map((grp) => {
+          const items = grp.items.filter(([t]) => perms.includes(TAB_PERM[t]));
+          if (!items.length) return null;
+          const isCollapsed = collapsed[grp.group];
+          return (
+            <div key={grp.group} className="mb-2">
+              <button onClick={() => setCollapsed((c) => ({ ...c, [grp.group]: !c[grp.group] }))}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted/70 transition-colors hover:text-ink">
+                <span>{grp.group}</span>
+                <span className={`text-xs transition-transform duration-200 ${isCollapsed ? "" : "rotate-90"}`}>›</span>
+              </button>
+              {!isCollapsed && (
+                <div className="mt-0.5 space-y-0.5">
+                  {items.map(([t, label, icon]) => {
+                    const activeTab = tab === t;
+                    return (
+                      <button key={t} onClick={() => onPick(t)}
+                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-all duration-200 ${activeTab ? "bg-brand text-white shadow-[0_6px_16px_-8px_rgba(217,124,154,0.9)]" : "text-ink/70 hover:bg-brand-soft/50 hover:text-brand-dark"}`}>
+                        <span className="w-5 shrink-0 text-center text-base leading-none">{icon}</span>
+                        <span className="truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+      {/* User + logout */}
+      <div className="border-t border-border/70 p-3">
+        <div className="mb-1.5 flex items-center gap-2.5 px-2 py-1">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-bold text-brand-dark">{me.name ? me.name.charAt(0).toUpperCase() : "A"}</span>
+          <div className="min-w-0"><p className="truncate text-sm font-bold text-ink">{me.name || "Admin"}</p><p className="truncate text-xs text-muted">{roleLabel}</p></div>
+        </div>
+        <button onClick={onLogout} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-red-500/10 hover:text-red-500">
+          <span className="w-5 shrink-0 text-center">⎋</span> Log out
+        </button>
+      </div>
     </div>
   );
 }

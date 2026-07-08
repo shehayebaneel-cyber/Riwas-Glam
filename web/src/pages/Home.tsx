@@ -33,7 +33,7 @@ export function Home() {
       <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute -right-24 -top-32 h-[28rem] w-[28rem] rounded-full bg-brand-soft blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-accent/10 blur-3xl" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-11 pt-9 sm:px-4 sm:py-24 lg:grid-cols-2">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-6 px-5 pb-11 pt-9 sm:gap-12 sm:px-4 sm:py-24 lg:grid-cols-2">
           <div>
             <p className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.26em] text-brand sm:text-sm sm:tracking-[0.28em]"><span className="h-px w-7 bg-accent sm:w-10" /> {SITE.tagline}</p>
             <h1 className="mt-5 font-display text-[2.7rem] font-extrabold leading-[1.04] text-ink sm:mt-6 sm:text-6xl">
@@ -49,12 +49,21 @@ export function Home() {
             {reviews && reviews.count > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted sm:mt-8"><span className="tracking-[0.15em] text-accent">★★★★★</span> <span><span className="font-semibold text-ink">{reviews.avg.toFixed(1)}</span> {t("from")} {reviews.count} {t("happy clients")}</span></p>}
             <div><AvailabilityWidget /></div>
           </div>
-          <div className="relative hidden lg:block">
-            <div className="absolute -inset-4 rounded-[2.75rem] bg-gradient-to-br from-brand-soft via-brand-soft/60 to-accent/25 blur-xl" />
-            <img src={SITE.heroImage} alt="Riwa's Glam" className="relative h-[24rem] w-full rounded-[2.25rem] object-cover shadow-xl ring-4 ring-white/70 sm:h-[32rem]" />
-            <div className="absolute -bottom-5 -left-5 rounded-2xl bg-surface px-5 py-3 shadow-lg">
-              <p className="font-display text-lg font-bold text-brand">Riwa's Glam</p>
-              <p className="text-xs text-muted">{SITE.tagline}</p>
+          <div>
+            {/* Mobile / tablet: show the ENTIRE image (no crop) in a clean rounded card */}
+            <div className="lg:hidden">
+              <div className="w-full rounded-3xl border border-brand-soft bg-surface p-3 shadow-[0_8px_24px_-16px_rgba(176,104,127,0.3)]">
+                <img src={SITE.heroImage} alt="Riwa's Glam" className="mx-auto max-h-[260px] w-full rounded-2xl object-contain" />
+              </div>
+            </div>
+            {/* Desktop: full-bleed cover hero with floating badge (unchanged) */}
+            <div className="relative hidden lg:block">
+              <div className="absolute -inset-4 rounded-[2.75rem] bg-gradient-to-br from-brand-soft via-brand-soft/60 to-accent/25 blur-xl" />
+              <img src={SITE.heroImage} alt="Riwa's Glam" className="relative h-[24rem] w-full rounded-[2.25rem] object-cover shadow-xl ring-4 ring-white/70 sm:h-[32rem]" />
+              <div className="absolute -bottom-5 -left-5 rounded-2xl bg-surface px-5 py-3 shadow-lg">
+                <p className="font-display text-lg font-bold text-brand">Riwa's Glam</p>
+                <p className="text-xs text-muted">{SITE.tagline}</p>
+              </div>
             </div>
           </div>
         </div>

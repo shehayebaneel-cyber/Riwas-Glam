@@ -23,13 +23,13 @@ export const SITE = {
   ],
   // Weekly hours shown on the site (keep in sync with the server booking config).
   hours: [
-    { day: "Sunday", value: "11:00 – 18:00" },
+    { day: "Sunday", value: "08:00 – 20:00" },
     { day: "Monday", value: "Closed" },
-    { day: "Tuesday", value: "10:00 – 19:00" },
-    { day: "Wednesday", value: "10:00 – 19:00" },
-    { day: "Thursday", value: "10:00 – 19:00" },
-    { day: "Friday", value: "10:00 – 20:00" },
-    { day: "Saturday", value: "10:00 – 20:00" },
+    { day: "Tuesday", value: "08:00 – 20:00" },
+    { day: "Wednesday", value: "08:00 – 20:00" },
+    { day: "Thursday", value: "08:00 – 20:00" },
+    { day: "Friday", value: "08:00 – 20:00" },
+    { day: "Saturday", value: "08:00 – 20:00" },
   ],
   heroImage: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=1000&q=80&auto=format&fit=crop",
   gallery: [
