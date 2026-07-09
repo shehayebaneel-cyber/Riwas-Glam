@@ -1,6 +1,15 @@
 export const toMin = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
 export const toHHMM = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
+/** Wall-clock date ("YYYY-MM-DD") and minutes-since-midnight in a given IANA timezone,
+ *  independent of the server's own timezone (Render runs in UTC). */
+export function wallClock(now: Date, tz: string): { date: string; min: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  let hh = Number(get("hour")); if (hh === 24) hh = 0; // some engines emit '24' for midnight
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, min: hh * 60 + Number(get("minute")) };
+}
+
 export interface DaySchedule { off: boolean; open: string; close: string; breakStart: string; breakEnd: string }
 export interface StaffLite { id: number; schedule: DaySchedule[]; blockedDates: string[] }
 export interface ApptLite { time: string; durationMin: number; staffId: number | null; status: string }
@@ -27,14 +36,15 @@ const apptsByStaff = (existing: ApptLite[]) => {
 /** Bookable start times ("HH:MM") for a service on a date, honouring each eligible
  *  staff's own schedule. staffId set → that staff; null → any eligible staff free. */
 export function availableSlots(opts: {
-  date: string; durationMin: number; staffId: number | null; staff: StaffLite[]; existing: ApptLite[]; now: Date; stepMin: number; leadMin: number;
+  date: string; durationMin: number; staffId: number | null; staff: StaffLite[]; existing: ApptLite[]; now: Date; stepMin: number; leadMin: number; tz?: string;
 }): string[] {
-  const { date, durationMin, staffId, staff, existing, now, stepMin, leadMin } = opts;
+  const { date, durationMin, staffId, staff, existing, now, stepMin, leadMin, tz = "Asia/Beirut" } = opts;
   const pool = staffId != null ? staff.filter((s) => s.id === staffId) : staff;
   if (!pool.length) return [];
   const dow = new Date(date + "T00:00:00").getDay();
-  const isToday = date === now.toLocaleDateString("en-CA");
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const wc = wallClock(now, tz);
+  const isToday = date === wc.date;
+  const nowMin = wc.min;
   const byStaff = apptsByStaff(existing);
 
   let minOpen = 24 * 60, maxClose = 0;

@@ -9,6 +9,10 @@ import { availableSlots, pickFreeStaff, type DaySchedule } from "./lib/slots.js"
 import { isPaymentMethod, genReference, whishInitiate, whishVerifyWebhook, whishParseWebhook, whishConfigured } from "./payments.js";
 import type { Payment } from "@prisma/client";
 
+// The salon is in Lebanon — run all date/time logic in Beirut wall-clock time
+// regardless of the host's timezone (Render runs in UTC).
+process.env.TZ = process.env.TZ || "Asia/Beirut";
+
 const app = express();
 app.set("trust proxy", true); // Render terminates TLS; trust x-forwarded-proto for absolute image URLs
 app.use(cors());
