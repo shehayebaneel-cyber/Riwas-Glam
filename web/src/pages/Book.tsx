@@ -10,10 +10,10 @@ import { PromoField, type Applied } from "../components/PromoField";
 import { PaymentMethodPicker, type PayMethod } from "../components/PaymentMethodPicker";
 import type { Category, Staff } from "../types";
 
-const ymd = (d: Date) => d.toLocaleDateString("en-CA");
+import { ymd, nextDays } from "../lib/time";
+
 const closedOn = (d: Date) => SITE.hours[d.getDay()]?.value === "Closed";
 const prettyDate = (s: string) => new Date(s + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-const nextDays = (n: number) => { const b = new Date(); b.setHours(0, 0, 0, 0); return Array.from({ length: n }, (_, i) => { const d = new Date(b); d.setDate(b.getDate() + i); return d; }); };
 
 const STEPS = ["Category", "Service", "Specialist", "Date & time", "Your details"];
 

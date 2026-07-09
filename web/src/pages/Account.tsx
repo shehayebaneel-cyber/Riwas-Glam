@@ -5,10 +5,10 @@ import { api, durationLabel, money } from "../lib/api";
 import { useCustomer } from "../context/CustomerAuth";
 import type { Appointment, Customer, FavService } from "../types";
 
-const ymd = (d: Date) => d.toLocaleDateString("en-CA");
+import { ymd, nextDays } from "../lib/time";
+
 const closedOn = (d: Date) => SITE.hours[d.getDay()]?.value === "Closed";
 const prettyDate = (s: string) => new Date(s + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-const nextDays = (n: number) => { const b = new Date(); b.setHours(0, 0, 0, 0); return Array.from({ length: n }, (_, i) => { const d = new Date(b); d.setDate(b.getDate() + i); return d; }); };
 
 export function Account() {
   const { customer, loading } = useCustomer();

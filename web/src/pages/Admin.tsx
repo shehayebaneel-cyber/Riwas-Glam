@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { SITE } from "../config";
 import { api } from "../lib/api";
+import { todayIso } from "../lib/time";
 import { CatalogAdmin } from "../components/CatalogAdmin";
 import { StaffAdmin } from "../components/StaffAdmin";
 import { CalendarAdmin } from "../components/CalendarAdmin";
@@ -73,7 +74,7 @@ export function Admin() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
-  const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
+  const [date, setDate] = useState(todayIso());
   const [items, setItems] = useState<Appointment[]>([]);
   const [newBooking, setNewBooking] = useState(false);
   const [giftPayFor, setGiftPayFor] = useState<Appointment | null>(null);
@@ -230,7 +231,7 @@ export function Admin() {
             <button onClick={() => setNewBooking(true)} className="btn btn-primary px-4 py-2 text-sm">+ New booking</button>
             <div className="flex items-center gap-1.5">
               <button onClick={() => setDate((d) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() - 1); return x.toLocaleDateString("en-CA"); })} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Previous day">‹</button>
-              <button onClick={() => setDate(new Date().toLocaleDateString("en-CA"))} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
+              <button onClick={() => setDate(todayIso())} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto !py-2 text-sm" />
               <button onClick={() => setDate((d) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + 1); return x.toLocaleDateString("en-CA"); })} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Next day">›</button>
             </div>

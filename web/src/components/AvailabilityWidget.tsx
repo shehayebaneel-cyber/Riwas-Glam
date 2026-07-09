@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { todayIso, parseDay } from "../lib/time";
 
 type Avail = { closed: boolean; today: boolean; tomorrow: boolean; next: { date: string; time: string } | null };
 
 function pretty(d: string) {
   const t = new Date(d + "T00:00:00");
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = parseDay(todayIso());
   const diff = Math.round((t.getTime() - today.getTime()) / 86400000);
   return diff === 0 ? "today" : diff === 1 ? "tomorrow" : t.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }

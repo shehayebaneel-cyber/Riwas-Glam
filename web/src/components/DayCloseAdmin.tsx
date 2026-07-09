@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { SITE } from "../config";
+import { todayIso } from "../lib/time";
 
 const money = (n: number) => "$" + (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
@@ -16,7 +17,7 @@ type Drawer = { date: string; openingBalance: number; cashExpenses: number; refu
 
 export function DayCloseAdmin({ adminKey }: { adminKey: string }) {
   const H = { "x-admin-key": adminKey };
-  const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
+  const [date, setDate] = useState(todayIso());
   const [r, setR] = useState<Report | null>(null);
   const [dw, setDw] = useState<Drawer | null>(null);
   const [savedDw, setSavedDw] = useState(false);

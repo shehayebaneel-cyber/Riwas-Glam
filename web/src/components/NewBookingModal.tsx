@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { todayIso } from "../lib/time";
 import type { Category, Staff } from "../types";
 
 type Pkg = { id: number; title: string };
@@ -9,7 +10,7 @@ export function NewBookingModal({ adminKey, onClose, onCreated, defaultDate, def
   const [catalog, setCatalog] = useState<Category[]>([]);
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = todayIso();
   const [f, setF] = useState({ kind: "service", serviceId: "", packageId: "", staffId: defaultStaffId ?? "", date: defaultDate || today, time: defaultTime || "", customerName: "", customerPhone: "", customerEmail: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

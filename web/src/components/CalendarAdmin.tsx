@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { todayIso } from "../lib/time";
 import type { Appointment, StaffFull } from "../types";
 
 export function CalendarAdmin({ adminKey }: { adminKey: string }) {
   const H = { "x-admin-key": adminKey };
-  const [date, setDate] = useState(new Date().toLocaleDateString("en-CA"));
+  const [date, setDate] = useState(todayIso());
   const [staff, setStaff] = useState<StaffFull[]>([]);
   const [appts, setAppts] = useState<Appointment[]>([]);
   useEffect(() => { api.get<StaffFull[]>("/api/admin/staff", H).then(setStaff).catch(() => {}); /* eslint-disable-next-line */ }, []);

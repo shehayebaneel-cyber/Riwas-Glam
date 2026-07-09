@@ -4,6 +4,7 @@ import { SITE } from "../config";
 import { api, money } from "../lib/api";
 import { NewBookingModal } from "../components/NewBookingModal";
 import { GiftCardPayModal } from "../components/GiftCardPayModal";
+import { todayIso as salonToday, nowMinutes, parseDay } from "../lib/time";
 import type { Appointment, DaySchedule } from "../types";
 
 const TKEY = "staff-token";
@@ -64,7 +65,7 @@ export function StaffPortal() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
-  const [anchor, setAnchor] = useState(() => new Date());   // any day inside the shown week
+  const [anchor, setAnchor] = useState(() => parseDay(salonToday()));   // any day inside the shown week (Beirut)
   const [byDate, setByDate] = useState<Record<string, Appointment[]>>({});
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [newB, setNewB] = useState<{ date: string; time: string } | null>(null);
@@ -136,8 +137,8 @@ export function StaffPortal() {
   const revenue = active.reduce((s, a) => s + a.price, 0);
   const commission = active.reduce((s, a) => s + (a.commissionAmount ?? 0), 0);
   const completed = active.filter((a) => a.status === "COMPLETED").length;
-  const todayIso = iso(new Date());
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const todayIso = salonToday();
+  const nowMin = nowMinutes();
   const shift = (n: number) => setAnchor((a) => { const d = new Date(a); d.setDate(d.getDate() + n * 7); return d; });
 
   return (
@@ -159,7 +160,7 @@ export function StaffPortal() {
       <div className="mt-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <button onClick={() => shift(-1)} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Previous week">‹</button>
-          <button onClick={() => setAnchor(new Date())} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
+          <button onClick={() => setAnchor(parseDay(salonToday()))} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
           <button onClick={() => shift(1)} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Next week">›</button>
         </div>
         <p className="text-sm font-semibold text-ink sm:text-base">{fmtDay(days[0])} – {fmtDay(days[6])}, {days[6].getFullYear()}</p>
