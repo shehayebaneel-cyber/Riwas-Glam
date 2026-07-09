@@ -11,7 +11,14 @@ import type { Payment } from "@prisma/client";
 
 // The salon is in Lebanon — run all date/time logic in Beirut wall-clock time
 // regardless of the host's timezone (Render runs in UTC).
-process.env.TZ = process.env.TZ || "Asia/Beirut";
+const TZ = "Asia/Beirut";
+process.env.TZ = process.env.TZ || TZ;
+
+// Beirut-local date helpers, independent of the host timezone. Use these for every
+// "today"/"this month" comparison so calendar-day logic always matches the salon.
+const beirutToday = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ }); // "YYYY-MM-DD"
+const beirutDay = (offsetDays: number) => new Date(Date.now() + offsetDays * 86400000).toLocaleDateString("en-CA", { timeZone: TZ });
+const beirutMonth = (d: Date = new Date()) => d.toLocaleDateString("en-CA", { timeZone: TZ }).slice(0, 7); // "YYYY-MM"
 
 const app = express();
 app.set("trust proxy", true); // Render terminates TLS; trust x-forwarded-proto for absolute image URLs
@@ -191,8 +198,7 @@ app.get("/api/next-availability", async (_req, res) => {
   const now = new Date();
   let today = false, tomorrow = false, next: { date: string; time: string } | null = null;
   for (let i = 0; i < 14; i++) {
-    const d = new Date(now); d.setDate(now.getDate() + i);
-    const date = d.toLocaleDateString("en-CA");
+    const date = beirutDay(i);
     const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
     const slots = availableSlots({ date, durationMin: duration, staffId: null, staff: eligible, existing, now, stepMin: SALON.slotStepMin, leadMin: SALON.leadMin });
     if (i === 0) today = slots.length > 0;
@@ -464,7 +470,7 @@ app.get("/api/admin/me", requireAdmin, async (req, res) => {
 
 // End-of-day closing report: everything that happened on a given date.
 app.get("/api/admin/reports/daily-closing", requireAdmin, async (req, res) => {
-  const date = STR((req.query as Record<string, string>).date, 10) || new Date().toLocaleDateString("en-CA");
+  const date = STR((req.query as Record<string, string>).date, 10) || beirutToday();
   if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
   const dayStart = new Date(date + "T00:00:00"), dayEnd = new Date(date + "T23:59:59.999");
   const [appts, payments, expenses, movements] = await Promise.all([
@@ -507,7 +513,7 @@ function drawerView(d: { openingBalance: number; cashExpenses: number; refunds: 
   return { cashSales, expectedCash, difference: round2(d.actualCash - expectedCash) };
 }
 app.get("/api/admin/cash-drawer", requireAdmin, async (req, res) => {
-  const date = STR((req.query as Record<string, string>).date, 10) || new Date().toLocaleDateString("en-CA");
+  const date = STR((req.query as Record<string, string>).date, 10) || beirutToday();
   if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
   const d = (await prisma.cashDrawer.findUnique({ where: { date } })) ?? { date, openingBalance: 0, cashExpenses: 0, refunds: 0, actualCash: 0, note: "", closedAt: null };
   res.json({ ...d, ...drawerView(d, await cashSalesFor(date)) });
@@ -588,7 +594,7 @@ app.get("/api/admin/analytics/marketing", requireAdmin, async (_req, res) => {
   const byCode: Record<string, { revenue: number; bookings: number }> = {};
   for (const a of appts) { const c = a.promoCode; (byCode[c] ??= { revenue: 0, bookings: 0 }); byCode[c].revenue = round2(byCode[c].revenue + a.price); byCode[c].bookings++; }
   const acq: Record<string, number> = {};
-  for (const c of customers) { const m = (c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)).toISOString().slice(0, 7); acq[m] = (acq[m] ?? 0) + 1; }
+  for (const c of customers) { const m = beirutMonth(c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)); acq[m] = (acq[m] ?? 0) + 1; }
   res.json({
     promos: promos.map((p) => ({ code: p.code, description: p.description, type: p.type, value: p.value, uses: p.usedCount, maxUses: p.maxUses, active: p.isActive, revenue: byCode[p.code]?.revenue ?? 0, bookings: byCode[p.code]?.bookings ?? 0 })),
     acquisition: Object.entries(acq).sort().slice(-6).map(([month, count]) => ({ month, count })),
@@ -599,7 +605,7 @@ app.get("/api/admin/analytics/marketing", requireAdmin, async (_req, res) => {
 
 // ---- Staff monthly goals + progress ----
 app.get("/api/admin/staff-goals", requireAdmin, async (req, res) => {
-  const month = STR((req.query as Record<string, string>).month, 7) || new Date().toISOString().slice(0, 7);
+  const month = STR((req.query as Record<string, string>).month, 7) || beirutMonth();
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "Invalid month." });
   const [staff, goals, appts] = await Promise.all([
     prisma.staff.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
@@ -701,7 +707,7 @@ app.get("/api/admin/analytics/customers", requireAdmin, async (_req, res) => {
     const lastVisit = done.map((a) => a.date).sort().pop();
     if (lastVisit && now - new Date(lastVisit + "T00:00:00").getTime() <= 90 * 86400000) active90++;
     clv.push({ name: c.name, spent, visits: done.length });
-    const m = (c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt)).toISOString().slice(0, 7);
+    const m = beirutMonth(c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt));
     acq[m] = (acq[m] ?? 0) + 1;
   }
   const total = customers.length;
@@ -777,8 +783,8 @@ app.delete("/api/admin/messages/:id", requireAdmin, async (req, res) => { await 
 
 // Unified alert center — everything that needs the owner's attention, in one place.
 app.get("/api/admin/alerts", requireAdmin, async (_req, res) => {
-  const today = new Date().toLocaleDateString("en-CA");
-  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString("en-CA");
+  const today = beirutToday();
+  const tomorrow = beirutDay(1);
   const monthMM = today.slice(5, 7);
   const [products, pendingReviews, expiringCards, pendingPayments, tmrwAppts, waiting, customers] = await Promise.all([
     prisma.product.findMany({ where: { isActive: true }, select: { name: true, quantity: true, minQuantity: true } }),
@@ -1292,12 +1298,12 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
 
 // ---- Admin home dashboard (all widgets + charts in one call) ----
 app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
-  const now = new Date(); const pad = (n: number) => String(n).padStart(2, "0");
-  const y = now.getUTCFullYear(), mo = now.getUTCMonth();
-  const todayStr = `${y}-${pad(mo + 1)}-${pad(now.getUTCDate())}`;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const todayStr = beirutToday();
+  const y = Number(todayStr.slice(0, 4)), mo = Number(todayStr.slice(5, 7)) - 1;
   const monthStart = `${y}-${pad(mo + 1)}-01`;
-  const monthEnd = `${y}-${pad(mo + 1)}-${pad(new Date(Date.UTC(y, mo + 1, 0)).getUTCDate())}`;
-  const months: string[] = []; for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, mo - i, 1)); months.push(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`); }
+  const monthEnd = `${y}-${pad(mo + 1)}-${pad(new Date(y, mo + 1, 0).getDate())}`;
+  const months: string[] = []; for (let i = 5; i >= 0; i--) { const d = new Date(y, mo - i, 1); months.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); }
   const sixStart = months[0] + "-01";
 
   const [apptsMonth, expMonth, appts6, exp6, staff, products, giftCards, pendingReviews, waitlist, customersB] = await Promise.all([
@@ -1307,7 +1313,7 @@ app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
     prisma.expense.findMany({ where: { date: { gte: sixStart, lte: monthEnd } } }),
     prisma.staff.findMany({ where: { isActive: true } }),
     prisma.product.findMany({ where: { isActive: true } }),
-    prisma.giftCard.findMany({ where: { createdAt: { gte: new Date(monthStart + "T00:00:00Z") } } }),
+    prisma.giftCard.findMany({ where: { createdAt: { gte: new Date(monthStart + "T00:00:00") } } }),
     prisma.review.count({ where: { status: "PENDING" } }),
     prisma.waitlistEntry.count({ where: { status: "WAITING" } }),
     prisma.customer.findMany({ where: { NOT: { birthday: "" } }, select: { name: true, birthday: true } }),
@@ -1479,7 +1485,7 @@ async function validatePromo(codeRaw: string, price: number, custId: number | nu
   if (!code) return { ok: false, error: "Enter a code." };
   const pc = await prisma.promoCode.findUnique({ where: { code } });
   if (!pc || !pc.isActive) return { ok: false, error: "That code isn't valid." };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = beirutToday();
   if (pc.startsAt && today < pc.startsAt) return { ok: false, error: "This code isn't active yet." };
   if (pc.expiresAt && today > pc.expiresAt) return { ok: false, error: "This code has expired." };
   if (pc.maxUses && pc.usedCount >= pc.maxUses) return { ok: false, error: "This code has reached its limit." };
@@ -1492,7 +1498,7 @@ async function validatePromo(codeRaw: string, price: number, custId: number | nu
   if (pc.birthdayOnly) {
     if (!custId) return { ok: false, error: "Log in to use your birthday reward." };
     const c = await prisma.customer.findUnique({ where: { id: custId } });
-    const mm = new Date().toISOString().slice(5, 7);
+    const mm = beirutToday().slice(5, 7);
     const bmm = c?.birthday ? (c.birthday.length > 5 ? c.birthday.slice(5, 7) : c.birthday.slice(0, 2)) : "";
     if (bmm !== mm) return { ok: false, error: "This code is only valid in your birthday month." };
   }
@@ -1677,7 +1683,7 @@ app.post("/api/admin/notifications/test", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 app.post("/api/admin/notifications/run-reminders", requireAdmin, async (_req, res) => {
-  const t = new Date(); t.setUTCDate(t.getUTCDate() + 1); const d = t.toISOString().slice(0, 10);
+  const d = beirutDay(1);
   const appts = await prisma.appointment.findMany({ where: { date: d, status: "CONFIRMED" } });
   for (const a of appts) await notify("reminder", { email: a.customerEmail || undefined, phone: a.customerPhone || undefined, data: { name: a.customerName, service: a.serviceName, date: a.date, time: a.time } });
   res.json({ ok: true, sent: appts.length });
@@ -1780,10 +1786,10 @@ app.get("/api/admin/movements", requireAdmin, async (req, res) => {
 });
 app.get("/api/admin/inventory/summary", requireAdmin, async (_req, res) => {
   const products = await prisma.product.findMany({ where: { isActive: true } });
-  const start = new Date(); start.setUTCHours(0, 0, 0, 0);
+  const start = new Date(); start.setHours(0, 0, 0, 0); // Beirut midnight (server runs in Beirut TZ)
   const usage = await prisma.stockMovement.aggregate({ _sum: { quantity: true }, where: { type: "USE", createdAt: { gte: start } } });
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const soonDate = new Date(); soonDate.setDate(soonDate.getDate() + 30); const soonStr = soonDate.toISOString().slice(0, 10);
+  const todayStr = beirutToday();
+  const soonStr = beirutDay(30);
   const low = products.filter((p) => p.quantity <= p.minQuantity);
   const expiring = products.filter((p) => p.expiryDate && p.expiryDate >= todayStr && p.expiryDate <= soonStr);
   res.json({
@@ -2012,7 +2018,7 @@ app.post("/api/customer/me/password", requireCustomer, async (req, res) => {
 });
 app.get("/api/customer/me/appointments", requireCustomer, async (req, res) => {
   const items = await prisma.appointment.findMany({ where: { customerId: custOf(req) }, orderBy: [{ date: "desc" }, { time: "desc" }], take: 100 });
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = beirutToday();
   const shaped = items.map((a) => ({ ...a, addOns: parseArr(a.addOns) }));
   res.json({
     upcoming: shaped.filter((a) => a.status === "CONFIRMED" && a.date >= today).sort((x, y) => (x.date + x.time).localeCompare(y.date + y.time)),
