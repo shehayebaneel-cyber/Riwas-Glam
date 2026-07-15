@@ -293,11 +293,15 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, onOpen, o
                 return (
                   <button key={a.id} onClick={() => onOpen(a)} title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}${a.staffName ? ` · ${a.staffName}` : ""}`}
                     style={{ top, height: h - 3, left: `calc(${lane * w}% + 3px)`, width: `calc(${w}% - 6px)` }}
-                    className={`absolute z-20 flex flex-col overflow-hidden rounded-lg border-s-4 px-2 py-1.5 text-left leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${t.bg} ${t.border} ${t.text} ${cancelled ? "line-through opacity-60" : a.status === "NO_SHOW" ? "opacity-80" : ""}`}>
-                    <span className="flex items-center gap-1 text-[11px] font-bold opacity-90">{a.time}–{fmtClock(e)}{mark && <span className="ms-auto text-xs">{mark}</span>}</span>
+                    className={`absolute z-20 flex flex-col overflow-hidden rounded-lg border-s-4 px-2 py-1 text-left leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${t.bg} ${t.border} ${t.text} ${cancelled ? "line-through opacity-60" : a.status === "NO_SHOW" ? "opacity-80" : ""}`}>
+                    <span className="flex items-center gap-1 text-[10px] font-semibold opacity-80">{a.time}–{fmtClock(e)}{mark && <span className="ms-auto text-xs">{mark}</span>}</span>
+                    {showAll && a.staffName && (
+                      <span className="flex items-center gap-1 truncate text-xs font-extrabold">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${t.dot}`} />{a.staffName}
+                      </span>
+                    )}
                     <span className="truncate text-[13px] font-bold">{a.serviceName}</span>
-                    {h > 58 && <span className="truncate text-xs opacity-80">{a.customerName}</span>}
-                    {showAll && a.staffName && h > 78 && <span className="mt-auto truncate text-[11px] font-semibold opacity-70">{a.staffName}</span>}
+                    {h > 76 && <span className="truncate text-[11px] opacity-80">{a.customerName}</span>}
                   </button>
                 );
               })}
