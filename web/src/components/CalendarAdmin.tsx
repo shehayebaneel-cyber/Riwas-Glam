@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { addDaysIso, nowMinutes, parseDay, todayIso, weekOf } from "../lib/time";
 import { waLink, waMessages } from "../lib/whatsapp";
@@ -8,8 +8,22 @@ import { NewBookingModal } from "./NewBookingModal";
 
 // Views are intentionally open-ended so a "month" grid can slot in later.
 type View = "day" | "week";
-const HOUR_H = 84; // px per hour in the week grid
-const GUTTER = 60; // px width of the time-label column
+const HOUR_H = 100; // px per hour in the week grid — roomier rows
+const GUTTER = 68; // px width of the time-label column
+
+// A tiny icon per service so the grid scans fast.
+const SERVICE_ICONS: [RegExp, string][] = [
+  [/bridal|wedding/i, "👰"],
+  [/makeup|glam|beat|contour/i, "💄"],
+  [/nail|refill|mani|pedi|gel|acrylic|polish/i, "💅"],
+  [/lash|extension/i, "👁️"],
+  [/brow|threading|tint|henna/i, "✨"],
+  [/facial|skin|peel|hydra/i, "🧖"],
+  [/hair|blow|color|colour|cut|style|keratin|treatment/i, "💇"],
+  [/wax|sugar/i, "🪒"],
+  [/massage|spa/i, "💆"],
+];
+const serviceIcon = (name: string) => SERVICE_ICONS.find(([r]) => r.test(name || ""))?.[1] ?? "💫";
 
 // Fresha-style: each STAFF member gets their own colour; status is a small
 // marker on the block (✓ done, ⚠ no-show, ✕ cancelled, ◔ pending) instead of
@@ -92,18 +106,33 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [view, anchor]);
   useEffect(() => { localStorage.setItem("rg-cal-view", view); }, [view]);
 
-  // Grid hour range = union of the visible staff working hours + any appointment
+  // The staff whose schedules/appointments matter for the current view.
+  const relevantStaff = useMemo(() => (staffFilter === "all" ? active : active.filter((s) => s.id === staffFilter)), [active, staffFilter]);
+
+  // Salon hours for a given day (union across the relevant staff), or null if closed.
+  const workingHours = (iso: string): { open: number; close: number } | null => {
+    let open = Infinity, close = -Infinity;
+    for (const s of relevantStaff) {
+      if (s.blockedDates?.includes(iso)) continue;
+      const d = s.schedule?.[parseDay(iso).getDay()];
+      if (d && !d.off) { open = Math.min(open, toMin(d.open)); close = Math.max(close, toMin(d.close)); }
+    }
+    return open < close ? { open, close } : null;
+  };
+
+  // Grid hour range = union of the relevant staff working hours + any appointment
   // that spills outside them, clamped to a sensible default.
   const { startH, endH } = useMemo(() => {
-    let min = 9 * 60, max = 20 * 60;
+    let min = 9 * 60, max = 19 * 60;
     for (const a of appts) { const s = toMin(a.time); min = Math.min(min, s); max = Math.max(max, s + (a.durationMin || 60)); }
     const days = view === "day" ? [anchor] : week;
-    for (const s of active) for (const iso of days) {
+    for (const s of relevantStaff) for (const iso of days) {
+      if (s.blockedDates?.includes(iso)) continue;
       const d = s.schedule?.[parseDay(iso).getDay()];
       if (d && !d.off) { min = Math.min(min, toMin(d.open)); max = Math.max(max, toMin(d.close)); }
     }
     return { startH: Math.max(0, Math.floor(min / 60)), endH: Math.min(24, Math.max(Math.ceil(max / 60), Math.floor(min / 60) + 1)) };
-  }, [appts, active, view, anchor, week]);
+  }, [appts, relevantStaff, view, anchor, week]);
 
   const step = (dir: number) => setAnchor((a) => addDaysIso(a, dir * (view === "week" ? 7 : 1)));
   const label = view === "day"
@@ -113,18 +142,19 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
   return (
     <div>
       {/* ---------- Toolbar ---------- */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <button onClick={() => setNewSlot({ date: anchor, time: "", staffId: "" })} className="btn btn-primary px-4 py-2 text-sm">+ New booking</button>
 
         <div className="flex items-center gap-1.5">
-          <button onClick={() => step(-1)} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Previous">‹</button>
-          <button onClick={() => setAnchor(todayIso())} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand">Today</button>
-          <button onClick={() => step(1)} className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink transition hover:bg-surface-2" aria-label="Next">›</button>
-          <span className="ms-1 text-sm font-semibold text-ink">{label}</span>
+          <button onClick={() => step(-1)} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand" aria-label="Previous">← <span className="hidden sm:inline">{view === "week" ? "Prev week" : "Prev"}</span></button>
+          <button onClick={() => setAnchor(todayIso())} className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white shadow transition hover:opacity-90">Today</button>
+          <button onClick={() => step(1)} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand" aria-label="Next"><span className="hidden sm:inline">{view === "week" ? "Next week" : "Next"}</span> →</button>
         </div>
 
+        <p className="font-display text-lg font-extrabold text-ink sm:text-xl">{label}</p>
+
         {/* Day | Week (Month drops in here later) */}
-        <div className="flex gap-1 rounded-full bg-surface-2 p-1">
+        <div className="ms-auto flex gap-1 rounded-full bg-surface-2 p-1">
           {(["day", "week"] as View[]).map((v) => (
             <button key={v} onClick={() => setView(v)}
               className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize transition ${view === v ? "bg-brand text-white shadow" : "text-muted hover:text-ink"}`}>{v}</button>
@@ -132,16 +162,16 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
         </div>
       </div>
 
-      {/* Legend (staff colours) + status key + (week) staff filter */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {active.map((s) => (
-            <span key={s.id} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink">
-              <span className={`h-2.5 w-2.5 rounded-full ${themeFor(s.id).dot}`} />{s.name}
+      {/* Legend (staff colour pills) + status key + (week) staff filter */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {active.map((s) => { const t = themeFor(s.id); return (
+            <span key={s.id} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${t.bg} ${t.text}`}>
+              <span className={`h-2 w-2 rounded-full ${t.dot}`} />{s.name}
             </span>
-          ))}
+          ); })}
         </div>
-        <span className="hidden text-[11px] text-muted sm:inline">✓ done · ⚠ no-show · ✕ cancelled · ◔ pending</span>
+        <span className="hidden text-[11px] text-muted lg:inline">✓ done · ⚠ no-show · ✕ cancelled · ◔ pending</span>
         {view === "week" && (
           <select value={String(staffFilter)} onChange={(e) => setStaffFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
             className="input !w-auto !py-1.5 text-sm ms-auto">
@@ -154,7 +184,7 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
       {/* ---------- Views ---------- */}
       {view === "day"
         ? <DayView date={anchor} staff={active} appts={appts} themeFor={themeFor} onOpen={setDetail} onSlot={(date, time, staffId) => setNewSlot({ date, time, staffId })} />
-        : <WeekView dates={week} appts={appts} staffFilter={staffFilter} startH={startH} endH={endH} themeFor={themeFor}
+        : <WeekView dates={week} appts={appts} staffFilter={staffFilter} startH={startH} endH={endH} themeFor={themeFor} workingHours={workingHours}
             onOpen={setDetail} onSlot={(date, time) => setNewSlot({ date, time, staffId: staffFilter === "all" ? "" : String(staffFilter) })} />}
 
       {/* ---------- Modals ---------- */}
@@ -225,28 +255,37 @@ function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
 }
 
 /* ============================ WEEK VIEW ============================ */
-function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, onOpen, onSlot }: {
+function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHours, onOpen, onSlot }: {
   dates: string[]; appts: Appointment[]; staffFilter: number | "all"; themeFor: (id?: number | null) => Theme;
-  startH: number; endH: number; onOpen: (a: Appointment) => void; onSlot: (date: string, time: string) => void;
+  startH: number; endH: number; workingHours: (iso: string) => { open: number; close: number } | null;
+  onOpen: (a: Appointment) => void; onSlot: (date: string, time: string) => void;
 }) {
   const hours = hoursBetween(startH, endH);
   const gridH = hours.length * HOUR_H;
+  const gridStart = startH * 60, gridEnd = endH * 60;
   const today = todayIso();
-  const cols = `${GUTTER}px repeat(${dates.length}, minmax(150px, 1fr))`;
-
+  const cols = `${GUTTER}px repeat(${dates.length}, minmax(160px, 1fr))`;
   const showAll = staffFilter === "all";
   const byDay = (iso: string) => appts.filter((a) => a.date === iso && (showAll ? true : a.staffId === staffFilter));
 
+  // Auto-scroll near the current time (or the salon open) when the week loads.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    const focus = dates.includes(today) ? nowMinutes() : gridStart + 60;
+    el.scrollTop = Math.max(0, (focus - gridStart) / 60 * HOUR_H - el.clientHeight * 0.3);
+  }, [dates, startH]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className="mt-4 overflow-x-auto rounded-2xl border border-border bg-surface">
-      {/* Header row */}
-      <div className="grid border-b border-border bg-surface/95" style={{ gridTemplateColumns: cols }}>
-        <div />
+    <div ref={scrollRef} className="mt-4 max-h-[74vh] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Sticky day header */}
+      <div className="sticky top-0 z-30 grid border-b border-slate-200 bg-white/95 backdrop-blur" style={{ gridTemplateColumns: cols }}>
+        <div className="border-e border-slate-200" />
         {dates.map((iso) => {
-          const d = parseDay(iso); const isToday = iso === today;
+          const d = parseDay(iso); const isToday = iso === today; const weekend = [0, 6].includes(d.getDay());
           return (
-            <div key={iso} className={`border-s border-border px-1 py-2.5 text-center ${isToday ? "bg-brand-soft/40" : ""}`}>
-              <p className="text-xs font-bold uppercase tracking-wide text-muted">{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
+            <div key={iso} className={`border-s border-slate-200 px-1 py-2.5 text-center ${isToday ? "bg-brand-soft/50" : weekend ? "bg-slate-50" : ""}`}>
+              <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-brand-dark" : "text-muted"}`}>{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
               <p className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base font-extrabold ${isToday ? "bg-brand text-white shadow" : "text-ink"}`}>{d.getDate()}</p>
             </div>
           );
@@ -256,52 +295,64 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, onOpen, o
       {/* Body */}
       <div className="grid" style={{ gridTemplateColumns: cols }}>
         {/* Time gutter */}
-        <div className="relative" style={{ height: gridH }}>
-          {hours.map((h, i) => <div key={h} className="absolute end-2 -translate-y-1/2 text-xs font-semibold text-muted" style={{ top: i * HOUR_H }}>{fmtHour(h)}</div>)}
+        <div className="relative border-e border-slate-200 bg-slate-50/40" style={{ height: gridH }}>
+          {hours.map((h, i) => <div key={h} className="absolute inset-x-0 -translate-y-1/2 pe-2 text-end text-[13px] font-bold text-ink/70" style={{ top: i * HOUR_H }}>{fmtHour(h)}</div>)}
         </div>
 
         {/* Day columns */}
         {dates.map((iso) => {
-          const isToday = iso === today;
+          const d = parseDay(iso); const isToday = iso === today; const weekend = [0, 6].includes(d.getDay());
           const { placed, laneCount } = layout(byDay(iso));
-          const nowTop = isToday ? (nowMinutes() - startH * 60) / 60 * HOUR_H : -1;
+          const nowTop = isToday ? (nowMinutes() - gridStart) / 60 * HOUR_H : -1;
+          const wh = workingHours(iso);
+          const closed: [number, number][] = !wh ? [[gridStart, gridEnd]] : [
+            ...(wh.open > gridStart ? [[gridStart, wh.open] as [number, number]] : []),
+            ...(wh.close < gridEnd ? [[wh.close, gridEnd] as [number, number]] : []),
+          ];
           return (
-            <div key={iso} className={`relative border-s border-border ${isToday ? "bg-brand-soft/15" : ""}`} style={{ height: gridH }}>
-              {/* Empty hour slots (click to add) + half-hour guide */}
+            <div key={iso} className={`relative border-s border-slate-200 ${isToday ? "bg-brand-soft/10" : weekend ? "bg-slate-50/50" : ""}`} style={{ height: gridH }}>
+              {/* Hour rows (zebra) + clickable empty slots + half-hour guide */}
               {hours.map((h, i) => (
                 <button key={h} onClick={() => onSlot(iso, `${pad(h)}:00`)} title="Add booking"
-                  className="group absolute inset-x-0 border-t border-border transition hover:bg-brand-soft/30" style={{ top: i * HOUR_H, height: HOUR_H }}>
-                  <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/50" />
+                  className={`absolute inset-x-0 border-t border-slate-200 transition hover:bg-brand-soft/40 ${i % 2 ? "bg-slate-50/50" : ""}`} style={{ top: i * HOUR_H, height: HOUR_H }}>
+                  <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-200/70" />
                 </button>
               ))}
 
-              {/* Now line */}
+              {/* Grey out closed hours */}
+              {closed.map(([a0, b0], k) => (
+                <div key={k} className="pointer-events-none absolute inset-x-0 z-[1] bg-slate-100/70" style={{ top: (a0 - gridStart) / 60 * HOUR_H, height: (b0 - a0) / 60 * HOUR_H }} />
+              ))}
+
+              {/* Live "now" line */}
               {isToday && nowTop >= 0 && nowTop <= gridH && (
-                <div className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-red-400" style={{ top: nowTop }}>
-                  <span className="absolute -start-1 -top-1 h-2 w-2 rounded-full bg-red-400" />
+                <div className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-red-500" style={{ top: nowTop }}>
+                  <span className="absolute -start-1.5 -top-[5px] h-2.5 w-2.5 rounded-full bg-red-500 shadow" />
                 </div>
               )}
 
-              {/* Appointment blocks — coloured by staff member */}
+              {/* Appointment cards — white card, staff-coloured accent */}
               {placed.map(({ a, s, e, lane }) => {
-                const top = (s - startH * 60) / 60 * HOUR_H;
-                const h = Math.max((e - s) / 60 * HOUR_H, 30);
+                const top = (s - gridStart) / 60 * HOUR_H;
+                const h = Math.max((e - s) / 60 * HOUR_H, 34);
                 const w = 100 / laneCount;
                 const t = themeFor(a.staffId);
                 const mark = STATUS_MARK[a.status];
                 const cancelled = a.status === "CANCELLED";
                 return (
                   <button key={a.id} onClick={() => onOpen(a)} title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}${a.staffName ? ` · ${a.staffName}` : ""}`}
-                    style={{ top, height: h - 3, left: `calc(${lane * w}% + 3px)`, width: `calc(${w}% - 6px)` }}
-                    className={`absolute z-20 flex flex-col overflow-hidden rounded-lg border-s-4 px-2 py-1 text-left leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${t.bg} ${t.border} ${t.text} ${cancelled ? "line-through opacity-60" : a.status === "NO_SHOW" ? "opacity-80" : ""}`}>
-                    <span className="flex items-center gap-1 text-[10px] font-semibold opacity-80">{a.time}–{fmtClock(e)}{mark && <span className="ms-auto text-xs">{mark}</span>}</span>
-                    {showAll && a.staffName && (
-                      <span className="flex items-center gap-1 truncate text-xs font-extrabold">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${t.dot}`} />{a.staffName}
-                      </span>
-                    )}
-                    <span className="truncate text-[13px] font-bold">{a.serviceName}</span>
-                    {h > 76 && <span className="truncate text-[11px] opacity-80">{a.customerName}</span>}
+                    style={{ top, height: h - 4, left: `calc(${lane * w}% + 3px)`, width: `calc(${w}% - 6px)` }}
+                    className={`rg-appt group absolute z-20 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 pe-2 ps-3 text-left leading-tight shadow-sm transition-all duration-200 hover:z-30 hover:-translate-y-0.5 hover:shadow-lg ${cancelled ? "opacity-60" : ""}`}>
+                    <span className={`absolute inset-y-0 start-0 w-1.5 ${t.dot}`} />
+                    <span className="flex items-center gap-1">
+                      <span className="shrink-0 text-xs">{serviceIcon(a.serviceName)}</span>
+                      <span className={`truncate text-[13px] font-extrabold ${t.text} ${cancelled ? "line-through" : ""}`}>{a.serviceName}</span>
+                      {mark && <span className="ms-auto shrink-0 text-xs">{mark}</span>}
+                    </span>
+                    <span className="truncate text-[11px] font-semibold text-ink/70">{a.time}–{fmtClock(e)}</span>
+                    {showAll && a.staffName && h > 62 && <span className="flex items-center gap-1 truncate text-[11px] font-bold text-ink/80"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${t.dot}`} />{a.staffName}</span>}
+                    {h > 86 && <span className="truncate text-[11px] text-muted">👤 {a.customerName}</span>}
+                    {h > 110 && a.price > 0 && <span className="truncate text-[11px] text-muted">💵 ${a.price} · {a.paymentMethod === "WHISH" ? "Whish" : "Cash"}</span>}
                   </button>
                 );
               })}

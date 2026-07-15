@@ -189,7 +189,7 @@ export function Admin() {
           </div>
         </div>
 
-        <div className={`mx-auto px-4 py-6 sm:px-6 ${tab === "calendar" ? "max-w-6xl" : "max-w-3xl"}`}>
+        <div className={`mx-auto px-4 py-6 sm:px-6 ${tab === "calendar" ? "max-w-none" : "max-w-3xl"}`}>
       {tab === "home" && perms.includes("website") && <div className="mb-4"><EmergencyControl adminKey={key} /></div>}
       {tab === "home" && me.role === "OWNER" && (
         <div className="mb-4 rounded-2xl border border-border bg-surface p-3">
