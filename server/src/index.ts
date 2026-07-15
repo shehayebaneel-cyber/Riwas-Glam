@@ -819,6 +819,17 @@ app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
 app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id); const b = req.body ?? {};
   if (b.actualMinutes !== undefined) await prisma.appointment.update({ where: { id }, data: { actualMinutes: Math.max(0, Math.round(NUM(b.actualMinutes, 0))) } }).catch(() => {});
+  // Discount / "paid less": set the final price. Revenue + commission derive from
+  // appointment.price, so we recompute the commission and sync the linked payment.
+  if (b.price !== undefined) {
+    const appt = await prisma.appointment.findUnique({ where: { id } });
+    if (!appt) return res.status(404).json({ error: "Not found." });
+    const price = Math.max(0, round2(NUM(b.price, appt.price)));
+    const commissionAmount = round2(price * appt.commissionPct / 100);
+    await prisma.appointment.update({ where: { id }, data: { price, commissionAmount } });
+    if (appt.paymentId) await prisma.payment.update({ where: { id: appt.paymentId }, data: { amount: price } }).catch(() => {});
+    return res.json(await prisma.appointment.findUnique({ where: { id } }));
+  }
   if (b.status !== undefined) {
     const status = STR(b.status, 20).toUpperCase();
     if (!["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"].includes(status)) return res.status(400).json({ error: "Invalid status." });

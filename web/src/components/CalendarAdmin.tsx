@@ -59,6 +59,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const hoursBetween = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, i) => a + i);
 const fmtHour = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`;
 const fmtClock = (m: number) => `${Math.floor(m / 60)}:${pad(m % 60)}`;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // Greedy lane packing so overlapping appointments sit side by side (Google-style).
 function layout(list: Appointment[]) {
@@ -370,6 +371,17 @@ function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
 }) {
   const H = { "x-admin-key": adminKey };
   const [busy, setBusy] = useState(false);
+  const [price, setPrice] = useState(a.price);
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [draft, setDraft] = useState(String(a.price));
+
+  async function savePrice() {
+    const n = Number(draft);
+    const val = Math.max(0, round2(Number.isFinite(n) ? n : a.price));
+    setBusy(true);
+    try { await api.patch(`/api/admin/appointments/${a.id}`, { price: val }, H); setPrice(val); setEditingPrice(false); onChanged(); }
+    catch (e) { alert(e instanceof Error ? e.message : "Couldn't update the price."); } finally { setBusy(false); }
+  }
 
   async function setStatus(status: string) {
     setBusy(true);
@@ -408,9 +420,40 @@ function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
           <Row k="Customer" v={a.customerName} />
           <Row k="Phone" v={a.customerPhone} />
           <Row k="Specialist" v={a.staffName || "Unassigned"} />
-          <Row k="Price" v={a.price ? `$${a.price}` : ""} />
           <Row k="Payment" v={a.paymentMethod ? `${a.paymentMethod}${a.paymentStatus ? ` · ${a.paymentStatus.toLowerCase()}` : ""}` : ""} />
           <Row k="Note" v={a.note} />
+        </div>
+
+        {/* Price / discount — set a lower final price for a discount or "paid less" */}
+        <div className="mt-3 rounded-xl border border-border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-muted">Price</span>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-bold text-ink">${price}
+                {price !== a.price && <span className="ms-1.5 text-xs font-normal text-muted line-through">${a.price}</span>}
+              </span>
+              {!editingPrice && <button onClick={() => { setDraft(String(price)); setEditingPrice(true); }} className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-bold text-brand-dark transition hover:bg-brand-soft/70">Discount / edit</button>}
+            </div>
+          </div>
+          {editingPrice && (
+            <div className="mt-3 space-y-2 border-t border-border pt-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-muted">$</span>
+                <input type="number" min={0} step="0.5" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus className="input !w-28 !py-1.5 text-sm" />
+                <div className="flex flex-wrap gap-1">
+                  {[10, 20, 50].map((p) => <button key={p} onClick={() => setDraft(String(round2(a.price * (1 - p / 100))))} className="rounded-full bg-surface-2 px-2 py-1 text-xs font-semibold text-ink transition hover:bg-brand-soft">-{p}%</button>)}
+                  <button onClick={() => setDraft(String(a.price))} className="rounded-full bg-surface-2 px-2 py-1 text-xs font-semibold text-muted transition hover:text-ink">Reset</button>
+                </div>
+              </div>
+              {Number(draft) !== a.price && Number.isFinite(Number(draft)) && (
+                <p className="text-xs text-muted">Discount: <span className="font-semibold text-ink">${round2(a.price - Number(draft))}</span> · commission recalculated automatically.</p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={savePrice} disabled={busy} className="btn btn-primary px-3 py-1.5 text-xs">{busy ? "Saving…" : "Save price"}</button>
+                <button onClick={() => setEditingPrice(false)} className="btn btn-ghost px-3 py-1.5 text-xs">Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
