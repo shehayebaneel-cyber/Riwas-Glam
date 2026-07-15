@@ -8,7 +8,8 @@ import { NewBookingModal } from "./NewBookingModal";
 
 // Views are intentionally open-ended so a "month" grid can slot in later.
 type View = "day" | "week";
-const HOUR_H = 56; // px per hour in the week grid
+const HOUR_H = 84; // px per hour in the week grid
+const GUTTER = 60; // px width of the time-label column
 
 // One place for every status colour, reused by the day cards and the week blocks.
 const STATUS: Record<string, { label: string; block: string; chip: string; dot: string }> = {
@@ -24,6 +25,7 @@ const toMin = (t: string) => { const [h, m] = (t || "0:0").split(":").map(Number
 const pad = (n: number) => String(n).padStart(2, "0");
 const hoursBetween = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, i) => a + i);
 const fmtHour = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`;
+const fmtClock = (m: number) => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
 // Greedy lane packing so overlapping appointments sit side by side (Google-style).
 function layout(list: Appointment[]) {
@@ -199,7 +201,7 @@ function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
   const hours = hoursBetween(startH, endH);
   const gridH = hours.length * HOUR_H;
   const today = todayIso();
-  const cols = `56px repeat(${dates.length}, minmax(116px, 1fr))`;
+  const cols = `${GUTTER}px repeat(${dates.length}, minmax(150px, 1fr))`;
 
   const showAll = staffFilter === "all";
   const byDay = (iso: string) => appts.filter((a) => a.date === iso && (showAll ? true : a.staffId === staffFilter));
@@ -207,14 +209,14 @@ function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
   return (
     <div className="mt-4 overflow-x-auto rounded-2xl border border-border bg-surface">
       {/* Header row */}
-      <div className="grid border-b border-border" style={{ gridTemplateColumns: cols }}>
+      <div className="grid border-b border-border bg-surface/95" style={{ gridTemplateColumns: cols }}>
         <div />
         {dates.map((iso) => {
           const d = parseDay(iso); const isToday = iso === today;
           return (
-            <div key={iso} className={`border-s border-border px-1 py-2 text-center ${isToday ? "bg-brand-soft/40" : ""}`}>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
-              <p className={`mx-auto mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-sm font-extrabold ${isToday ? "bg-brand text-white" : "text-ink"}`}>{d.getDate()}</p>
+            <div key={iso} className={`border-s border-border px-1 py-2.5 text-center ${isToday ? "bg-brand-soft/40" : ""}`}>
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
+              <p className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base font-extrabold ${isToday ? "bg-brand text-white shadow" : "text-ink"}`}>{d.getDate()}</p>
             </div>
           );
         })}
@@ -224,7 +226,7 @@ function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
       <div className="grid" style={{ gridTemplateColumns: cols }}>
         {/* Time gutter */}
         <div className="relative" style={{ height: gridH }}>
-          {hours.map((h, i) => <div key={h} className="absolute end-1 -translate-y-1/2 text-[10px] font-medium text-muted" style={{ top: i * HOUR_H }}>{fmtHour(h)}</div>)}
+          {hours.map((h, i) => <div key={h} className="absolute end-2 -translate-y-1/2 text-xs font-semibold text-muted" style={{ top: i * HOUR_H }}>{fmtHour(h)}</div>)}
         </div>
 
         {/* Day columns */}
@@ -234,10 +236,12 @@ function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
           const nowTop = isToday ? (nowMinutes() - startH * 60) / 60 * HOUR_H : -1;
           return (
             <div key={iso} className={`relative border-s border-border ${isToday ? "bg-brand-soft/15" : ""}`} style={{ height: gridH }}>
-              {/* Empty hour slots (click to add) */}
+              {/* Empty hour slots (click to add) + half-hour guide */}
               {hours.map((h, i) => (
                 <button key={h} onClick={() => onSlot(iso, `${pad(h)}:00`)} title="Add booking"
-                  className="absolute inset-x-0 border-t border-border/70 transition hover:bg-brand-soft/30" style={{ top: i * HOUR_H, height: HOUR_H }} />
+                  className="group absolute inset-x-0 border-t border-border transition hover:bg-brand-soft/30" style={{ top: i * HOUR_H, height: HOUR_H }}>
+                  <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/50" />
+                </button>
               ))}
 
               {/* Now line */}
@@ -250,15 +254,16 @@ function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
               {/* Appointment blocks */}
               {placed.map(({ a, s, e, lane }) => {
                 const top = (s - startH * 60) / 60 * HOUR_H;
-                const h = Math.max((e - s) / 60 * HOUR_H, 24);
+                const h = Math.max((e - s) / 60 * HOUR_H, 30);
                 const w = 100 / laneCount;
                 return (
-                  <button key={a.id} onClick={() => onOpen(a)} title={`${a.time} · ${a.serviceName} · ${a.customerName}`}
-                    style={{ top, height: h - 2, left: `calc(${lane * w}% + 2px)`, width: `calc(${w}% - 4px)` }}
-                    className={`absolute z-20 overflow-hidden rounded-md border-s-4 px-1.5 py-1 text-left text-[11px] leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${st(a.status).block}`}>
-                    <p className="font-bold">{a.time}{showAll && a.staffName ? ` · ${a.staffName}` : ""}</p>
-                    <p className="truncate font-semibold">{a.serviceName}</p>
-                    {h > 42 && <p className="truncate opacity-80">{a.customerName}</p>}
+                  <button key={a.id} onClick={() => onOpen(a)} title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}`}
+                    style={{ top, height: h - 3, left: `calc(${lane * w}% + 3px)`, width: `calc(${w}% - 6px)` }}
+                    className={`absolute z-20 flex flex-col overflow-hidden rounded-lg border-s-4 px-2 py-1.5 text-left leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${st(a.status).block}`}>
+                    <span className="text-[11px] font-bold opacity-90">{a.time}–{fmtClock(e)}</span>
+                    <span className="truncate text-[13px] font-bold">{a.serviceName}</span>
+                    {h > 58 && <span className="truncate text-xs opacity-80">{a.customerName}</span>}
+                    {showAll && a.staffName && h > 78 && <span className="mt-auto truncate text-[11px] font-semibold opacity-70">{a.staffName}</span>}
                   </button>
                 );
               })}
