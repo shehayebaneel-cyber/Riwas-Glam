@@ -11,13 +11,32 @@ type View = "day" | "week";
 const HOUR_H = 84; // px per hour in the week grid
 const GUTTER = 60; // px width of the time-label column
 
-// One place for every status colour, reused by the day cards and the week blocks.
-const STATUS: Record<string, { label: string; block: string; chip: string; dot: string }> = {
-  CONFIRMED: { label: "Confirmed", block: "border-brand bg-brand-soft text-brand-dark", chip: "bg-brand-soft text-brand-dark", dot: "bg-brand" },
-  PENDING: { label: "Pending", block: "border-amber-400 bg-amber-50 text-amber-800", chip: "bg-amber-100 text-amber-700", dot: "bg-amber-400" },
-  COMPLETED: { label: "Completed", block: "border-emerald-500 bg-emerald-50 text-emerald-800", chip: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
-  CANCELLED: { label: "Cancelled", block: "border-border bg-surface-2 text-muted line-through", chip: "bg-surface-2 text-muted", dot: "bg-ink/25" },
-  NO_SHOW: { label: "No-show", block: "border-red-400 bg-red-50 text-red-700", chip: "bg-red-100 text-red-600", dot: "bg-red-400" },
+// Fresha-style: each STAFF member gets their own colour; status is a small
+// marker on the block (✓ done, ⚠ no-show, ✕ cancelled, ◔ pending) instead of
+// driving the whole colour. Class strings are literal so Tailwind keeps them.
+type Theme = { bg: string; border: string; text: string; dot: string };
+const PALETTE: Theme[] = [
+  { bg: "bg-rose-100", border: "border-rose-500", text: "text-rose-800", dot: "bg-rose-500" },
+  { bg: "bg-violet-100", border: "border-violet-500", text: "text-violet-800", dot: "bg-violet-500" },
+  { bg: "bg-sky-100", border: "border-sky-500", text: "text-sky-800", dot: "bg-sky-500" },
+  { bg: "bg-amber-100", border: "border-amber-500", text: "text-amber-900", dot: "bg-amber-500" },
+  { bg: "bg-emerald-100", border: "border-emerald-500", text: "text-emerald-800", dot: "bg-emerald-500" },
+  { bg: "bg-fuchsia-100", border: "border-fuchsia-500", text: "text-fuchsia-800", dot: "bg-fuchsia-500" },
+  { bg: "bg-teal-100", border: "border-teal-500", text: "text-teal-800", dot: "bg-teal-500" },
+  { bg: "bg-indigo-100", border: "border-indigo-500", text: "text-indigo-800", dot: "bg-indigo-500" },
+  { bg: "bg-orange-100", border: "border-orange-500", text: "text-orange-900", dot: "bg-orange-500" },
+  { bg: "bg-cyan-100", border: "border-cyan-500", text: "text-cyan-800", dot: "bg-cyan-500" },
+];
+const NEUTRAL: Theme = { bg: "bg-slate-100", border: "border-slate-400", text: "text-slate-700", dot: "bg-slate-400" };
+const STATUS_MARK: Record<string, string> = { COMPLETED: "✓", NO_SHOW: "⚠", CANCELLED: "✕", PENDING: "◔" };
+
+// Status chip (used in the day list + detail modal, where colour = staff).
+const STATUS: Record<string, { label: string; chip: string }> = {
+  CONFIRMED: { label: "Confirmed", chip: "bg-brand-soft text-brand-dark" },
+  PENDING: { label: "Pending", chip: "bg-amber-100 text-amber-700" },
+  COMPLETED: { label: "Completed", chip: "bg-emerald-100 text-emerald-700" },
+  CANCELLED: { label: "Cancelled", chip: "bg-surface-2 text-muted" },
+  NO_SHOW: { label: "No-show", chip: "bg-red-100 text-red-600" },
 };
 const st = (s: string) => STATUS[s] ?? STATUS.CONFIRMED;
 
@@ -53,6 +72,14 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
 
   const week = useMemo(() => weekOf(anchor), [anchor]);
   const active = useMemo(() => staff.filter((s) => s.isActive), [staff]);
+
+  // Stable colour per staff member (assigned by id order, so it never shifts).
+  const themeById = useMemo(() => {
+    const m = new Map<number, Theme>();
+    [...staff].sort((a, b) => a.id - b.id).forEach((s, i) => m.set(s.id, PALETTE[i % PALETTE.length]));
+    return m;
+  }, [staff]);
+  const themeFor = (id?: number | null) => (id != null ? themeById.get(id) : undefined) ?? NEUTRAL;
 
   useEffect(() => { api.get<StaffFull[]>("/api/admin/staff", H).then(setStaff).catch(() => {}); /* eslint-disable-next-line */ }, []);
 
@@ -105,15 +132,16 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
         </div>
       </div>
 
-      {/* Legend + (week) staff filter */}
+      {/* Legend (staff colours) + status key + (week) staff filter */}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {Object.values(STATUS).map((s) => (
-            <span key={s.label} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted">
-              <span className={`h-2.5 w-2.5 rounded-full ${s.dot}`} />{s.label}
+          {active.map((s) => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink">
+              <span className={`h-2.5 w-2.5 rounded-full ${themeFor(s.id).dot}`} />{s.name}
             </span>
           ))}
         </div>
+        <span className="hidden text-[11px] text-muted sm:inline">✓ done · ⚠ no-show · ✕ cancelled · ◔ pending</span>
         {view === "week" && (
           <select value={String(staffFilter)} onChange={(e) => setStaffFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
             className="input !w-auto !py-1.5 text-sm ms-auto">
@@ -125,8 +153,8 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
 
       {/* ---------- Views ---------- */}
       {view === "day"
-        ? <DayView date={anchor} staff={active} appts={appts} onOpen={setDetail} onSlot={(date, time, staffId) => setNewSlot({ date, time, staffId })} />
-        : <WeekView dates={week} appts={appts} staffFilter={staffFilter} startH={startH} endH={endH}
+        ? <DayView date={anchor} staff={active} appts={appts} themeFor={themeFor} onOpen={setDetail} onSlot={(date, time, staffId) => setNewSlot({ date, time, staffId })} />
+        : <WeekView dates={week} appts={appts} staffFilter={staffFilter} startH={startH} endH={endH} themeFor={themeFor}
             onOpen={setDetail} onSlot={(date, time) => setNewSlot({ date, time, staffId: staffFilter === "all" ? "" : String(staffFilter) })} />}
 
       {/* ---------- Modals ---------- */}
@@ -140,23 +168,26 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
 }
 
 /* ============================ DAY VIEW ============================ */
-function DayView({ date, staff, appts, onOpen, onSlot }: {
-  date: string; staff: StaffFull[]; appts: Appointment[];
+function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
+  date: string; staff: StaffFull[]; appts: Appointment[]; themeFor: (id?: number | null) => Theme;
   onOpen: (a: Appointment) => void; onSlot: (date: string, time: string, staffId: string) => void;
 }) {
   const dow = parseDay(date).getDay();
   const forStaff = (id: number) => appts.filter((a) => a.staffId === id && a.status !== "CANCELLED").sort((a, b) => a.time.localeCompare(b.time));
   const unassigned = appts.filter((a) => !a.staffId && a.status !== "CANCELLED").sort((a, b) => a.time.localeCompare(b.time));
 
-  const Item = ({ a }: { a: Appointment }) => (
-    <button onClick={() => onOpen(a)} className={`flex w-full items-start gap-2 rounded-lg border-s-4 p-2 text-left text-sm shadow-sm transition hover:shadow ${st(a.status).block}`}>
-      <div className="min-w-0">
-        <p className="font-semibold"><span className="font-extrabold">{a.time}</span> · {a.serviceName}</p>
-        <p className="truncate text-xs opacity-80">{a.customerName} · {a.customerPhone}</p>
-      </div>
-      <span className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${st(a.status).chip}`}>{st(a.status).label}</span>
-    </button>
-  );
+  const Item = ({ a }: { a: Appointment }) => {
+    const t = themeFor(a.staffId);
+    return (
+      <button onClick={() => onOpen(a)} className={`flex w-full items-start gap-2 rounded-lg border-s-4 p-2 text-left text-sm shadow-sm transition hover:shadow ${t.bg} ${t.border} ${t.text}`}>
+        <div className="min-w-0">
+          <p className="font-semibold"><span className="font-extrabold">{a.time}</span> · {a.serviceName}</p>
+          <p className="truncate text-xs opacity-80">{a.customerName} · {a.customerPhone}</p>
+        </div>
+        {a.status !== "CONFIRMED" && <span className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${st(a.status).chip}`}>{st(a.status).label}</span>}
+      </button>
+    );
+  };
 
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -168,7 +199,7 @@ function DayView({ date, staff, appts, onOpen, onSlot }: {
         return (
           <div key={s.id} className="card p-3">
             <div className="flex items-center justify-between">
-              <p className="font-display font-bold text-ink">{s.name}</p>
+              <p className="flex items-center gap-2 font-display font-bold text-ink"><span className={`h-3 w-3 rounded-full ${themeFor(s.id).dot}`} />{s.name}</p>
               <span className={`text-xs font-semibold ${off ? "text-red-500" : "text-emerald-600"}`}>{blocked ? "Blocked" : off ? "Day off" : `${day!.open}–${day!.close}`}</span>
             </div>
             <div className="mt-2 max-h-[22rem] space-y-1.5 overflow-y-auto pe-0.5">
@@ -194,8 +225,8 @@ function DayView({ date, staff, appts, onOpen, onSlot }: {
 }
 
 /* ============================ WEEK VIEW ============================ */
-function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
-  dates: string[]; appts: Appointment[]; staffFilter: number | "all";
+function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, onOpen, onSlot }: {
+  dates: string[]; appts: Appointment[]; staffFilter: number | "all"; themeFor: (id?: number | null) => Theme;
   startH: number; endH: number; onOpen: (a: Appointment) => void; onSlot: (date: string, time: string) => void;
 }) {
   const hours = hoursBetween(startH, endH);
@@ -251,16 +282,19 @@ function WeekView({ dates, appts, staffFilter, startH, endH, onOpen, onSlot }: {
                 </div>
               )}
 
-              {/* Appointment blocks */}
+              {/* Appointment blocks — coloured by staff member */}
               {placed.map(({ a, s, e, lane }) => {
                 const top = (s - startH * 60) / 60 * HOUR_H;
                 const h = Math.max((e - s) / 60 * HOUR_H, 30);
                 const w = 100 / laneCount;
+                const t = themeFor(a.staffId);
+                const mark = STATUS_MARK[a.status];
+                const cancelled = a.status === "CANCELLED";
                 return (
-                  <button key={a.id} onClick={() => onOpen(a)} title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}`}
+                  <button key={a.id} onClick={() => onOpen(a)} title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}${a.staffName ? ` · ${a.staffName}` : ""}`}
                     style={{ top, height: h - 3, left: `calc(${lane * w}% + 3px)`, width: `calc(${w}% - 6px)` }}
-                    className={`absolute z-20 flex flex-col overflow-hidden rounded-lg border-s-4 px-2 py-1.5 text-left leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${st(a.status).block}`}>
-                    <span className="text-[11px] font-bold opacity-90">{a.time}–{fmtClock(e)}</span>
+                    className={`absolute z-20 flex flex-col overflow-hidden rounded-lg border-s-4 px-2 py-1.5 text-left leading-tight shadow-sm transition hover:z-30 hover:shadow-md ${t.bg} ${t.border} ${t.text} ${cancelled ? "line-through opacity-60" : a.status === "NO_SHOW" ? "opacity-80" : ""}`}>
+                    <span className="flex items-center gap-1 text-[11px] font-bold opacity-90">{a.time}–{fmtClock(e)}{mark && <span className="ms-auto text-xs">{mark}</span>}</span>
                     <span className="truncate text-[13px] font-bold">{a.serviceName}</span>
                     {h > 58 && <span className="truncate text-xs opacity-80">{a.customerName}</span>}
                     {showAll && a.staffName && h > 78 && <span className="mt-auto truncate text-[11px] font-semibold opacity-70">{a.staffName}</span>}
