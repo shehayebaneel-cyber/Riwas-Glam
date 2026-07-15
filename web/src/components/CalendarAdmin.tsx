@@ -331,6 +331,12 @@ function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
     try { await api.post(`/api/admin/payments/${a.paymentId}/mark-paid`, {}, H); onChanged(); onClose(); }
     catch (e) { alert(e instanceof Error ? e.message : "Couldn't mark paid."); } finally { setBusy(false); }
   }
+  async function remove() {
+    if (!confirm(`Delete this booking (${a.serviceName} for ${a.customerName})? This permanently removes it and can't be undone.`)) return;
+    setBusy(true);
+    try { await api.delete(`/api/admin/appointments/${a.id}`, H); onChanged(); onClose(); }
+    catch (e) { alert(e instanceof Error ? e.message : "Couldn't delete."); } finally { setBusy(false); }
+  }
 
   const done = a.status === "COMPLETED", cancelled = a.status === "CANCELLED";
   const waText = (a.status === "COMPLETED" ? waMessages.thanks : waMessages.confirmation)({ customerName: a.customerName, serviceName: a.serviceName, date: a.date, time: a.time });
@@ -367,6 +373,7 @@ function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
           {!done && !cancelled && <button onClick={() => setStatus("NO_SHOW")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-amber-600 transition hover:bg-amber-400/15">No-show</button>}
           {!cancelled && <button onClick={() => setStatus("CANCELLED")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/15">Cancel</button>}
           {(cancelled || a.status === "NO_SHOW") && <button onClick={() => setStatus("CONFIRMED")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-brand-dark transition hover:bg-brand-soft">Restore</button>}
+          <button onClick={remove} disabled={busy} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10">🗑 Delete</button>
           <button onClick={onClose} className="ms-auto rounded-full px-3 py-1.5 text-xs font-semibold text-muted hover:text-ink">Close</button>
         </div>
       </div>

@@ -418,7 +418,7 @@ function describeAction(method: string, path: string): string {
   if (/services/.test(seg)) return `${verb} a service`;
   if (/categories/.test(seg)) return `${verb} a category`;
   if (/addons/.test(seg)) return `${verb} an add-on`;
-  if (/appointments/.test(seg)) return method === "POST" ? "Created a booking" : "Updated a booking";
+  if (/appointments/.test(seg)) return method === "POST" ? "Created a booking" : method === "DELETE" ? "Deleted a booking" : "Updated a booking";
   if (/payments/.test(seg)) return "Updated a payment";
   if (/products|inventory|stock|recipe|movements/.test(seg)) return `${verb} inventory`;
   if (/reviews/.test(seg)) return "Moderated a review";
@@ -827,6 +827,20 @@ app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
     return res.json(updated);
   }
   res.json(await prisma.appointment.findUnique({ where: { id } }));
+});
+// Permanently delete a booking (e.g. cleaning up a cancelled/test entry). Also
+// removes its linked money record unless that payment was actually PAID (keep
+// real revenue history). paymentId/appointmentId are loose links, so no cascade.
+app.delete("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const appt = await prisma.appointment.findUnique({ where: { id } });
+  if (!appt) return res.status(404).json({ error: "Not found." });
+  if (appt.paymentId) {
+    const pay = await prisma.payment.findUnique({ where: { id: appt.paymentId } }).catch(() => null);
+    if (pay && pay.status !== "PAID") await prisma.payment.delete({ where: { id: pay.id } }).catch(() => {});
+  }
+  await prisma.appointment.delete({ where: { id } });
+  res.json({ ok: true });
 });
 // Front-desk booking (staff enters a phone-in appointment). More lenient than the
 // public flow — trusts staff on timing; links an existing customer by phone/email.
