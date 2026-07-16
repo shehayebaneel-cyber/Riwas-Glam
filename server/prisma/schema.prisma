@@ -498,6 +498,9 @@ model Payout {
 
 model Appointment {
   id               Int      @id @default(autoincrement())
+  // Multi-service visit: appointments booked together share a groupId and run
+  // back-to-back with the same specialist. "" = a normal single-service booking.
+  groupId          String   @default("")
   serviceId        Int?
   service          Service? @relation(fields: [serviceId], references: [id])
   packageId        Int?
@@ -531,4 +534,5 @@ model Appointment {
   pointsAwarded    Boolean  @default(false) // loyalty points already granted for this visit?
   createdAt        DateTime @default(now())
   @@index([date])
+  @@index([groupId])
 }

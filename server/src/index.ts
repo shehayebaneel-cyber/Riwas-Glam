@@ -5,7 +5,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { prisma } from "./db.js";
 import { SALON } from "./config.js";
-import { availableSlots, pickFreeStaff, type DaySchedule } from "./lib/slots.js";
+import { availableSlots, pickFreeStaff, toHHMM, toMin, type DaySchedule } from "./lib/slots.js";
 import { isPaymentMethod, genReference, whishInitiate, whishVerifyWebhook, whishParseWebhook, whishConfigured } from "./payments.js";
 import type { Payment } from "@prisma/client";
 
@@ -83,8 +83,14 @@ async function createPayment(input: { kind: "BOOKING" | "GIFTCARD"; method: stri
 // Deliver the purchase once its payment is PAID: confirm the booking / activate + email the gift card.
 async function fulfillPayment(payment: Payment) {
   if (payment.kind === "BOOKING" && payment.appointmentId) {
-    const appt = await prisma.appointment.update({ where: { id: payment.appointmentId }, data: { status: "CONFIRMED", paymentStatus: "PAID" } }).catch(() => null);
-    if (appt) notify("confirmation", { email: appt.customerEmail || undefined, phone: appt.customerPhone || undefined, data: { name: appt.customerName, service: appt.serviceName, date: appt.date, time: appt.time } });
+    // A multi-service visit shares one payment — confirm every appointment in the group.
+    const appt = await prisma.appointment.findUnique({ where: { id: payment.appointmentId } }).catch(() => null);
+    if (appt) {
+      const where = appt.groupId ? { groupId: appt.groupId } : { id: appt.id };
+      await prisma.appointment.updateMany({ where, data: { status: "CONFIRMED", paymentStatus: "PAID" } });
+      const group = appt.groupId ? await prisma.appointment.findMany({ where, orderBy: { time: "asc" } }) : [appt];
+      notify("confirmation", { email: appt.customerEmail || undefined, phone: appt.customerPhone || undefined, data: { name: appt.customerName, service: group.map((a) => a.serviceName).join(" + "), date: appt.date, time: group[0]?.time ?? appt.time } });
+    }
   } else if (payment.kind === "GIFTCARD" && payment.giftCardId) {
     const card = await prisma.giftCard.update({ where: { id: payment.giftCardId }, data: { status: "ACTIVE", paymentStatus: "PAID" } }).catch(() => null);
     if (card?.purchaserEmail) notify("giftcard", { email: card.purchaserEmail, data: { code: card.code, value: `$${card.initialValue}` } });
@@ -106,7 +112,12 @@ async function markPaymentPaid(payment: Payment, extra?: { txnId?: string; provi
 // Mark a payment FAILED/CANCELLED and reflect it on the linked booking / gift card.
 async function voidPayment(payment: Payment, status: "FAILED" | "CANCELLED") {
   const updated = await prisma.payment.update({ where: { id: payment.id }, data: { status } });
-  if (payment.appointmentId) await prisma.appointment.update({ where: { id: payment.appointmentId }, data: { paymentStatus: status, status: "CANCELLED" } }).catch(() => {});
+  if (payment.appointmentId) {
+    // Cancel the whole visit — every appointment sharing the group's payment.
+    const appt = await prisma.appointment.findUnique({ where: { id: payment.appointmentId } }).catch(() => null);
+    const where = appt?.groupId ? { groupId: appt.groupId } : { id: payment.appointmentId };
+    await prisma.appointment.updateMany({ where, data: { paymentStatus: status, status: "CANCELLED" } }).catch(() => {});
+  }
   if (payment.giftCardId) await prisma.giftCard.update({ where: { id: payment.giftCardId }, data: { paymentStatus: status, status: "VOID" } }).catch(() => {});
   return updated;
 }
@@ -151,16 +162,36 @@ app.get("/api/catalog", async (_req, res) => {
 });
 
 // Resolve a booking: service, add-ons, totals, and the eligible specialists.
-async function resolveBooking(serviceId: number, addOnIds: number[]) {
-  const service = await prisma.service.findUnique({ where: { id: serviceId }, include: { staff: true } });
-  if (!service || !service.isActive) return null;
-  const addOns = addOnIds.length ? await prisma.addOn.findMany({ where: { id: { in: addOnIds }, categoryId: service.categoryId, isActive: true } }) : [];
-  const durationMin = service.durationMin + addOns.reduce((s, a) => s + a.durationMin, 0);
-  const price = round2(service.price + addOns.reduce((s, a) => s + a.price, 0));
-  let rows = service.staff.filter((s) => s.isActive);
-  if (!rows.length) rows = await prisma.staff.findMany({ where: { isActive: true } }); // fallback: anyone
-  const eligible = rows.map((s) => ({ id: s.id, name: s.name, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates) as string[] }));
-  return { service, addOns, durationMin, price, eligible };
+// One or more services booked as a single visit: ordered segments (each service +
+// its add-ons), combined totals, and the specialists able to perform ALL of them
+// back-to-back. eligible = [] means no single specialist covers every service.
+async function resolveServices(serviceIds: number[], addOnIds: number[]) {
+  const ids = [...new Set(serviceIds)].filter((n) => n > 0).slice(0, 6);
+  if (!ids.length) return null;
+  const rows = await prisma.service.findMany({ where: { id: { in: ids }, isActive: true }, include: { staff: true } });
+  if (rows.length !== ids.length) return null;
+  const services = ids.map((id) => rows.find((s) => s.id === id)!);
+  const catIds = [...new Set(services.map((s) => s.categoryId))];
+  const addOns = addOnIds.length ? await prisma.addOn.findMany({ where: { id: { in: addOnIds }, categoryId: { in: catIds }, isActive: true } }) : [];
+  // Each add-on rides on the first selected service of its category.
+  const segments = services.map((service) => {
+    const own = addOns.filter((a) => a.categoryId === service.categoryId && services.find((s) => s.categoryId === a.categoryId) === service);
+    return {
+      service, addOns: own,
+      durationMin: service.durationMin + own.reduce((s, a) => s + a.durationMin, 0),
+      price: round2(service.price + own.reduce((s, a) => s + a.price, 0)),
+    };
+  });
+  const durationMin = segments.reduce((s, g) => s + g.durationMin, 0);
+  const price = round2(segments.reduce((s, g) => s + g.price, 0));
+  // Staff who can do ALL selected services (a service with no assigned staff = anyone).
+  let pool = await prisma.staff.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  for (const s of services) {
+    const own = s.staff.filter((x) => x.isActive);
+    if (own.length) { const okIds = new Set(own.map((x) => x.id)); pool = pool.filter((x) => okIds.has(x.id)); }
+  }
+  const eligible = pool.map((s) => ({ id: s.id, name: s.name, commissionPct: s.commissionPct, schedule: parseSchedule(s.schedule), blockedDates: parseArr(s.blockedDates) as string[] }));
+  return { services, segments, durationMin, price, eligible };
 }
 // A package books like a service, but any active specialist can perform it.
 async function resolvePackage(id: number) {
@@ -181,8 +212,11 @@ app.get("/api/availability", async (req, res) => {
   const addOnIds = STR(q.addOns).split(",").map(Number).filter((n) => n > 0);
   if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
   const pkgId = q.packageId ? Number(q.packageId) : 0;
-  const r = pkgId ? await resolvePackage(pkgId) : await resolveBooking(Number(q.serviceId), addOnIds);
+  const serviceIds = STR(q.serviceIds, 60).split(",").map(Number).filter((n) => n > 0);
+  if (!serviceIds.length && q.serviceId) serviceIds.push(Number(q.serviceId));
+  const r = pkgId ? await resolvePackage(pkgId) : await resolveServices(serviceIds, addOnIds);
   if (!r) return res.status(404).json({ error: "Not found." });
+  if (!r.eligible.length) return res.json({ date, durationMin: r.durationMin, price: r.price, slots: [], conflict: "No single specialist offers all of those services together — please book them separately." });
   const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
   const slots = availableSlots({ date, durationMin: r.durationMin, staffId, staff: r.eligible, existing, now: new Date(), stepMin: SALON.slotStepMin, leadMin: SALON.leadMin });
   res.json({ date, durationMin: r.durationMin, price: r.price, slots });
@@ -223,10 +257,12 @@ app.post("/api/appointments", async (req, res) => {
   const emg = await getSetting("emergencyClose", EMERGENCY_DEFAULT);
   if (emg.closed) return res.status(423).json({ error: emg.message || "Online booking is temporarily paused — please contact us to book." });
   const isPkg = !!b.packageId;
+  const serviceIds: number[] = Array.isArray(b.serviceIds) ? b.serviceIds.map(Number).filter((n: number) => n > 0) : (b.serviceId ? [Number(b.serviceId)] : []);
   const pr = isPkg ? await resolvePackage(Number(b.packageId)) : null;
-  const sr = isPkg ? null : await resolveBooking(Number(b.serviceId), addOnIds);
+  const sr = isPkg ? null : await resolveServices(serviceIds, addOnIds);
   const r = pr ?? sr;
   if (!r) return res.status(404).json({ error: "That isn't available." });
+  if (!r.eligible.length) return res.status(409).json({ error: "No single specialist offers all of those services together — please book them separately." });
   if (staffId != null && !r.eligible.some((s) => s.id === staffId)) return res.status(400).json({ error: "That specialist isn't available for this." });
   const existing = await prisma.appointment.findMany({ where: { date }, select: { time: true, durationMin: true, staffId: true, status: true } });
   const slots = availableSlots({ date, durationMin: r.durationMin, staffId, staff: r.eligible, existing, now: new Date(), stepMin: SALON.slotStepMin, leadMin: SALON.leadMin });
@@ -248,25 +284,44 @@ app.post("/api/appointments", async (req, res) => {
     if (pr2.ok) { price = Math.max(0, round2(price - pr2.discount)); promoUsed = pr2.code; await prisma.promoCode.update({ where: { code: pr2.code }, data: { usedCount: { increment: 1 } } }).catch(() => {}); }
   }
   const isWhish = method === "WHISH";
-  const appointment = await prisma.appointment.create({
-    data: {
-      serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
-      staffId, customerId: custId, customerName: name, customerPhone: phone, customerEmail: STR(b.customerEmail, 120),
-      date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
-      addOns: JSON.stringify(pr ? [] : sr!.addOns.map((a) => ({ name: a.name, price: a.price }))),
-      price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
-      note: STR(b.note, 500), promoCode: promoUsed, branchId: await defaultBranchId(),
-      // Whish: hold the slot as PENDING until the gateway confirms. Cash: confirmed now, pay on arrival.
-      status: isWhish ? "PENDING" : "CONFIRMED", paymentMethod: method, paymentStatus: "PENDING",
-    },
-  });
+  // Build the visit: one appointment per service, chained back-to-back with the
+  // same specialist. Multiple services share a groupId and ONE payment (total).
+  const segs = pr
+    ? [{ serviceId: null as number | null, packageId: pr.pkg.id as number | null, name: pr.pkg.title, durationMin: pr.durationMin, addOns: [] as { name: string; price: number }[], price: r.price }]
+    : sr!.segments.map((g) => ({ serviceId: g.service.id as number | null, packageId: null as number | null, name: g.service.name, durationMin: g.durationMin, addOns: g.addOns.map((a) => ({ name: a.name, price: a.price })), price: g.price }));
+  const groupId = segs.length > 1 ? crypto.randomUUID() : "";
+  const branchId = await defaultBranchId();
+  // Spread any loyalty/promo discount across the segments proportionally.
+  const factor = r.price > 0 ? price / r.price : 0;
+  const appts = [];
+  let offset = 0, allocated = 0;
+  for (let i = 0; i < segs.length; i++) {
+    const g = segs[i];
+    const segPrice = i === segs.length - 1 ? round2(price - allocated) : round2(g.price * factor);
+    allocated = round2(allocated + segPrice);
+    appts.push(await prisma.appointment.create({
+      data: {
+        groupId, serviceId: g.serviceId, packageId: g.packageId,
+        staffId, customerId: custId, customerName: name, customerPhone: phone, customerEmail: STR(b.customerEmail, 120),
+        date, time: toHHMM(toMin(time) + offset), durationMin: g.durationMin, serviceName: g.name, staffName: chosen?.name ?? "",
+        addOns: JSON.stringify(g.addOns),
+        price: segPrice, commissionPct, commissionAmount: round2(segPrice * commissionPct / 100),
+        note: i === 0 ? STR(b.note, 500) : "", promoCode: i === 0 ? promoUsed : "", branchId,
+        // Whish: hold the slot as PENDING until the gateway confirms. Cash: confirmed now, pay on arrival.
+        status: isWhish ? "PENDING" : "CONFIRMED", paymentMethod: method, paymentStatus: "PENDING",
+      },
+    }));
+    offset += g.durationMin;
+  }
+  const appointment = appts[0];
+  const serviceLabel = appts.map((a) => a.serviceName).join(" + ");
   const payment = await createPayment({ kind: "BOOKING", method, amount: price, appointmentId: appointment.id, customerName: name, customerEmail: appointment.customerEmail, customerPhone: phone });
   await prisma.appointment.update({ where: { id: appointment.id }, data: { paymentId: payment.id } });
 
   if (!isWhish) {
     // Cash: the slot is held; the salon collects and marks it paid on arrival.
-    notify("confirmation", { email: appointment.customerEmail || undefined, phone: appointment.customerPhone || undefined, data: { name: appointment.customerName, service: appointment.serviceName, date: appointment.date, time: appointment.time } });
-    return res.status(201).json({ ok: true, method, payment: { reference: payment.reference, status: payment.status }, appointment });
+    notify("confirmation", { email: appointment.customerEmail || undefined, phone: appointment.customerPhone || undefined, data: { name: appointment.customerName, service: serviceLabel, date: appointment.date, time: appointment.time } });
+    return res.status(201).json({ ok: true, method, payment: { reference: payment.reference, status: payment.status }, appointment, appointments: appts });
   }
   // Whish: start the gateway. Do NOT confirm the booking until payment is confirmed.
   const init = await whishInitiate({ reference: payment.reference, amount: price, currency: "USD", successUrl: `${WEB_URL}/payment/${payment.reference}`, failureUrl: `${WEB_URL}/payment/${payment.reference}`, callbackUrl: `${req.protocol}://${req.get("host")}/api/webhooks/whish`, customer: { name, phone, email: appointment.customerEmail } });
@@ -338,7 +393,10 @@ app.get("/api/payments/:reference", async (req, res) => {
   }
   if (p.status === "PAID" && p.kind === "BOOKING" && p.appointmentId) {
     const a = await prisma.appointment.findUnique({ where: { id: p.appointmentId } });
-    if (a) out.booking = { serviceName: a.serviceName, date: a.date, time: a.time, staffName: a.staffName };
+    if (a) {
+      const group = a.groupId ? await prisma.appointment.findMany({ where: { groupId: a.groupId }, orderBy: { time: "asc" } }) : [a];
+      out.booking = { serviceName: group.map((x) => x.serviceName).join(" + "), date: a.date, time: group[0]?.time ?? a.time, staffName: a.staffName };
+    }
   }
   res.json(out);
 });
@@ -355,7 +413,14 @@ app.get("/api/receipts/:reference", async (req, res) => {
   };
   if (p.kind === "BOOKING" && p.appointmentId) {
     const a = await prisma.appointment.findUnique({ where: { id: p.appointmentId } });
-    if (a) out.booking = { serviceName: a.serviceName, date: a.date, time: a.time, staffName: a.staffName, addOns: parseArr(a.addOns), price: a.price };
+    if (a) {
+      const group = a.groupId ? await prisma.appointment.findMany({ where: { groupId: a.groupId }, orderBy: { time: "asc" } }) : [a];
+      out.booking = {
+        serviceName: group.map((x) => x.serviceName).join(" + "), date: a.date, time: group[0]?.time ?? a.time, staffName: a.staffName,
+        addOns: group.flatMap((x) => parseArr(x.addOns)), price: round2(group.reduce((s, x) => s + x.price, 0)),
+        services: group.map((x) => ({ name: x.serviceName, time: x.time, durationMin: x.durationMin, price: x.price })),
+      };
+    }
   }
   if (p.kind === "GIFTCARD" && p.giftCardId) {
     const c = await prisma.giftCard.findUnique({ where: { id: p.giftCardId } });
@@ -827,7 +892,11 @@ app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
     const price = Math.max(0, round2(NUM(b.price, appt.price)));
     const commissionAmount = round2(price * appt.commissionPct / 100);
     await prisma.appointment.update({ where: { id }, data: { price, commissionAmount } });
-    if (appt.paymentId) await prisma.payment.update({ where: { id: appt.paymentId }, data: { amount: price } }).catch(() => {});
+    // The payment covers the whole visit — resync it to the group's new total.
+    const gAppts = await prisma.appointment.findMany({ where: appt.groupId ? { groupId: appt.groupId } : { id } });
+    const total = round2(gAppts.reduce((s, a) => s + a.price, 0));
+    const payId = appt.paymentId ?? gAppts.find((a) => a.paymentId)?.paymentId;
+    if (payId) await prisma.payment.update({ where: { id: payId }, data: { amount: total } }).catch(() => {});
     return res.json(await prisma.appointment.findUnique({ where: { id } }));
   }
   if (b.status !== undefined) {
@@ -861,10 +930,12 @@ app.post("/api/admin/appointments/new", requireAdmin, async (req, res) => {
   const name = STR(b.customerName, 80), phone = STR(b.customerPhone, 40), email = STR(b.customerEmail, 120);
   if (!name || !phone) return res.status(400).json({ error: "Customer name and phone are required." });
   if (!isDate(date) || !isTime(time)) return res.status(400).json({ error: "Please pick a valid date and time." });
+  const serviceIds: number[] = Array.isArray(b.serviceIds) ? b.serviceIds.map(Number).filter((n: number) => n > 0) : (b.serviceId ? [Number(b.serviceId)] : []);
   const pr = b.packageId ? await resolvePackage(Number(b.packageId)) : null;
-  const sr = pr ? null : await resolveBooking(Number(b.serviceId), []);
+  const sr = pr ? null : await resolveServices(serviceIds, []);
   const r = pr ?? sr;
   if (!r) return res.status(404).json({ error: "That service or package isn't available." });
+  if (!r.eligible.length) return res.status(409).json({ error: "No single specialist offers all of those services — book them separately." });
   let staffId = b.staffId ? Number(b.staffId) : null;
   if (staffId != null && !r.eligible.some((s) => s.id === staffId)) staffId = null;
   if (staffId == null) {
@@ -874,18 +945,30 @@ app.post("/api/admin/appointments/new", requireAdmin, async (req, res) => {
   const chosen = r.eligible.find((s) => s.id === staffId);
   const commissionPct = chosen?.commissionPct ?? 0;
   const cust = await prisma.customer.findFirst({ where: { OR: [...(email ? [{ email: email.toLowerCase() }] : []), { phone }] } }).catch(() => null);
-  const price = r.price;
-  const appointment = await prisma.appointment.create({ data: {
-    serviceId: pr ? null : sr!.service.id, packageId: pr ? pr.pkg.id : null,
-    staffId, customerId: cust?.id ?? null, customerName: name, customerPhone: phone, customerEmail: email,
-    date, time, durationMin: r.durationMin, serviceName: pr ? pr.pkg.title : sr!.service.name, staffName: chosen?.name ?? "",
-    addOns: "[]", price, commissionPct, commissionAmount: round2(price * commissionPct / 100),
-    note: STR(b.note, 500), branchId: await defaultBranchId(), status: "CONFIRMED", paymentMethod: "CASH", paymentStatus: "PENDING",
-  } });
-  const payment = await createPayment({ kind: "BOOKING", method: "CASH", amount: price, appointmentId: appointment.id, customerName: name, customerEmail: email, customerPhone: phone });
+  // One appointment per service, chained back-to-back (same pattern as the public flow).
+  const segs = pr
+    ? [{ serviceId: null as number | null, packageId: pr.pkg.id as number | null, name: pr.pkg.title, durationMin: pr.durationMin, price: r.price }]
+    : sr!.segments.map((g) => ({ serviceId: g.service.id as number | null, packageId: null as number | null, name: g.service.name, durationMin: g.durationMin, price: g.price }));
+  const groupId = segs.length > 1 ? crypto.randomUUID() : "";
+  const branchId = await defaultBranchId();
+  const appts = [];
+  let offset = 0;
+  for (let i = 0; i < segs.length; i++) {
+    const g = segs[i];
+    appts.push(await prisma.appointment.create({ data: {
+      groupId, serviceId: g.serviceId, packageId: g.packageId,
+      staffId, customerId: cust?.id ?? null, customerName: name, customerPhone: phone, customerEmail: email,
+      date, time: toHHMM(toMin(time) + offset), durationMin: g.durationMin, serviceName: g.name, staffName: chosen?.name ?? "",
+      addOns: "[]", price: g.price, commissionPct, commissionAmount: round2(g.price * commissionPct / 100),
+      note: i === 0 ? STR(b.note, 500) : "", branchId, status: "CONFIRMED", paymentMethod: "CASH", paymentStatus: "PENDING",
+    } }));
+    offset += g.durationMin;
+  }
+  const appointment = appts[0];
+  const payment = await createPayment({ kind: "BOOKING", method: "CASH", amount: r.price, appointmentId: appointment.id, customerName: name, customerEmail: email, customerPhone: phone });
   await prisma.appointment.update({ where: { id: appointment.id }, data: { paymentId: payment.id } });
-  notify("confirmation", { email: email || undefined, phone, data: { name, service: appointment.serviceName, date, time } });
-  res.status(201).json({ ok: true, appointment, payment: { reference: payment.reference, status: payment.status } });
+  notify("confirmation", { email: email || undefined, phone, data: { name, service: appts.map((a) => a.serviceName).join(" + "), date, time } });
+  res.status(201).json({ ok: true, appointment, appointments: appts, payment: { reference: payment.reference, status: payment.status } });
 });
 
 // ---- Admin: payments ----
@@ -923,18 +1006,21 @@ app.post("/api/admin/appointments/:id/pay-giftcard", requireAdmin, async (req, r
   if (card.expiresAt && card.expiresAt.getTime() < Date.now()) return res.status(400).json({ error: "This gift card has expired." });
   if (card.balance <= 0) return res.status(400).json({ error: "This gift card has no balance left." });
 
-  const price = round2(appt.price);
+  // A multi-service visit is paid as one: total the group and settle its single payment.
+  const groupWhere = appt.groupId ? { groupId: appt.groupId } : { id: appt.id };
+  const groupAppts = await prisma.appointment.findMany({ where: groupWhere });
+  const price = round2(groupAppts.reduce((s, a) => s + a.price, 0));
   const gift = round2(Math.min(card.balance, price));
   const cashRemainder = round2(price - gift);
   const newBalance = round2(card.balance - gift);
 
   await prisma.giftCard.update({ where: { id: card.id }, data: { balance: newBalance, status: newBalance <= 0 ? "REDEEMED" : "ACTIVE" } });
 
-  // Attach to the booking's payment (create one if it never had a payment record), then mark paid.
-  let payment = await prisma.payment.findFirst({ where: { appointmentId: apptId }, orderBy: { createdAt: "desc" } });
+  // Attach to the visit's payment (create one if it never had a payment record), then mark paid.
+  let payment = await prisma.payment.findFirst({ where: { appointmentId: { in: groupAppts.map((a) => a.id) } }, orderBy: { createdAt: "desc" } });
   if (!payment) payment = await createPayment({ kind: "BOOKING", method: "GIFTCARD", amount: price, appointmentId: apptId, customerName: appt.customerName, customerEmail: appt.customerEmail, customerPhone: appt.customerPhone });
   await prisma.payment.update({ where: { id: payment.id }, data: { method: "GIFTCARD", provider: "giftcard", providerRef: card.code } });
-  await prisma.appointment.update({ where: { id: apptId }, data: { paymentMethod: "GIFTCARD" } }).catch(() => {});
+  await prisma.appointment.updateMany({ where: groupWhere, data: { paymentMethod: "GIFTCARD" } }).catch(() => {});
   const fresh = await prisma.payment.findUnique({ where: { id: payment.id } });
   if (fresh) await markPaymentPaid(fresh, { providerData: { giftCard: card.code, giftApplied: gift, cashRemainder } });
 

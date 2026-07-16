@@ -11,10 +11,12 @@ export function NewBookingModal({ adminKey, onClose, onCreated, defaultDate, def
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const today = todayIso();
-  const [f, setF] = useState({ kind: "service", serviceId: "", packageId: "", staffId: defaultStaffId ?? "", date: defaultDate || today, time: defaultTime || "", customerName: "", customerPhone: "", customerEmail: "", note: "" });
+  const [f, setF] = useState({ kind: "service", packageId: "", staffId: defaultStaffId ?? "", date: defaultDate || today, time: defaultTime || "", customerName: "", customerPhone: "", customerEmail: "", note: "" });
+  const [serviceIds, setServiceIds] = useState<number[]>([]); // one or more — booked back-to-back
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const set = (k: string, v: string) => setF({ ...f, [k]: v });
+  const allServices = catalog.flatMap((c) => c.services);
 
   useEffect(() => {
     api.get<Category[]>("/api/catalog").then(setCatalog).catch(() => {});
@@ -25,11 +27,11 @@ export function NewBookingModal({ adminKey, onClose, onCreated, defaultDate, def
   async function save() {
     if (!f.customerName.trim() || !f.customerPhone.trim()) { setErr("Enter the customer's name and phone."); return; }
     if (!f.time) { setErr("Pick a time."); return; }
-    if (f.kind === "service" && !f.serviceId) { setErr("Choose a service."); return; }
+    if (f.kind === "service" && !serviceIds.length) { setErr("Choose at least one service."); return; }
     if (f.kind === "package" && !f.packageId) { setErr("Choose a package."); return; }
     setBusy(true); setErr("");
     const body = {
-      ...(f.kind === "package" ? { packageId: Number(f.packageId) } : { serviceId: Number(f.serviceId) }),
+      ...(f.kind === "package" ? { packageId: Number(f.packageId) } : { serviceIds }),
       staffId: f.staffId ? Number(f.staffId) : null,
       date: f.date, time: f.time, customerName: f.customerName, customerPhone: f.customerPhone, customerEmail: f.customerEmail, note: f.note,
     };
@@ -50,10 +52,26 @@ export function NewBookingModal({ adminKey, onClose, onCreated, defaultDate, def
 
         <div className="mt-3 space-y-3">
           {f.kind === "service" ? (
-            <select value={f.serviceId} onChange={(e) => set("serviceId", e.target.value)} className="input">
-              <option value="">Choose a service…</option>
-              {catalog.map((c) => <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>{c.services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>)}
-            </select>
+            <div className="space-y-2">
+              <select value="" onChange={(e) => { const id = Number(e.target.value); if (id && !serviceIds.includes(id)) setServiceIds([...serviceIds, id]); }} className="input">
+                <option value="">{serviceIds.length ? "Add another service…" : "Choose a service…"}</option>
+                {catalog.map((c) => <optgroup key={c.id} label={`${c.emoji} ${c.name}`}>{c.services.filter((s) => !serviceIds.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>)}
+              </select>
+              {serviceIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {serviceIds.map((id) => {
+                    const s = allServices.find((x) => x.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-ink">
+                        {s?.name ?? id}
+                        <button onClick={() => setServiceIds(serviceIds.filter((x) => x !== id))} aria-label="Remove" className="text-muted hover:text-ink">✕</button>
+                      </span>
+                    );
+                  })}
+                  {serviceIds.length > 1 && <span className="self-center text-xs text-muted">booked back-to-back</span>}
+                </div>
+              )}
+            </div>
           ) : (
             <select value={f.packageId} onChange={(e) => set("packageId", e.target.value)} className="input">
               <option value="">Choose a package…</option>

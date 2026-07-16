@@ -26,7 +26,7 @@ export function Book() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [step, setStep] = useState(0);
   const [catId, setCatId] = useState<number | null>(null);
-  const [serviceId, setServiceId] = useState<number | null>(null);
+  const [serviceIds, setServiceIds] = useState<number[]>([]); // pick as many as you like — booked back-to-back
   const [addOnIds, setAddOnIds] = useState<number[]>([]);
   const [staffId, setStaffId] = useState<number | null>(null);
   const [date, setDate] = useState("");
@@ -47,7 +47,7 @@ export function Book() {
       setCatalog(c);
       const pre = Number(params.get("service"));
       const preCat = c.find((cat) => cat.services.some((s) => s.id === pre));
-      if (pre && preCat) { setServiceId(pre); setCatId(preCat.id); setStep(1); }
+      if (pre && preCat) { setServiceIds([pre]); setCatId(preCat.id); setStep(1); }
     }).catch(() => {});
     api.get<Staff[]>("/api/staff").then(setStaff).catch(() => {});
     // eslint-disable-next-line
@@ -68,34 +68,54 @@ export function Book() {
     (on ? api.delete(`/api/customer/me/favorites/${id}`, authHeader) : api.post(`/api/customer/me/favorites/${id}`, {}, authHeader)).catch(() => {});
   }
 
-  const service = useMemo(() => catalog.flatMap((c) => c.services).find((s) => s.id === serviceId) ?? null, [catalog, serviceId]);
-  const category = useMemo(() => catalog.find((c) => c.id === service?.categoryId) ?? null, [catalog, service]);
-  const addOns = category?.addOns ?? [];
+  const allServices = useMemo(() => catalog.flatMap((c) => c.services), [catalog]);
+  const selectedServices = useMemo(() => serviceIds.map((id) => allServices.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s), [allServices, serviceIds]);
+  const service = selectedServices[0] ?? null; // first pick (waitlist context, back-compat)
+  const serviceLabel = selectedServices.map((s) => s.name).join(" + ");
+  // Add-ons of every selected service's category.
+  const addOns = useMemo(() => {
+    const catsOf = new Set(selectedServices.map((s) => s.categoryId));
+    return catalog.filter((c) => catsOf.has(c.id)).flatMap((c) => c.addOns);
+  }, [catalog, selectedServices]);
   const selectedAddOns = addOns.filter((a) => addOnIds.includes(a.id));
-  const total = (service?.price ?? 0) + selectedAddOns.reduce((s, a) => s + a.price, 0);
-  const totalMin = (service?.durationMin ?? 0) + selectedAddOns.reduce((s, a) => s + a.durationMin, 0);
-  const eligibleStaff: { id: number; name: string; role: string }[] = service?.staff && service.staff.length ? service.staff : staff;
+  const total = selectedServices.reduce((s, x) => s + x.price, 0) + selectedAddOns.reduce((s, a) => s + a.price, 0);
+  const totalMin = selectedServices.reduce((s, x) => s + x.durationMin, 0) + selectedAddOns.reduce((s, a) => s + a.durationMin, 0);
+  // Specialists able to do ALL selected services (a service with no assigned staff = anyone).
+  const eligibleStaff: { id: number; name: string; role: string }[] = useMemo(() => {
+    let pool = staff;
+    for (const s of selectedServices) if (s.staff && s.staff.length) { const ok = new Set(s.staff.map((x) => x.id)); pool = pool.filter((x) => ok.has(x.id)); }
+    return pool;
+  }, [staff, selectedServices]);
   const chosenCat = useMemo(() => catalog.find((c) => c.id === catId) ?? null, [catalog, catId]);
 
   useEffect(() => {
-    if (step !== 3 || !serviceId || !date) return;
+    if (step !== 3 || !serviceIds.length || !date) return;
     setSlots(null); setTime("");
-    const p = new URLSearchParams({ date, serviceId: String(serviceId) });
+    const p = new URLSearchParams({ date, serviceIds: serviceIds.join(",") });
     if (staffId) p.set("staffId", String(staffId));
     if (addOnIds.length) p.set("addOns", addOnIds.join(","));
     api.get<{ slots: string[] }>(`/api/availability?${p}`).then((d) => setSlots(d.slots)).catch(() => setSlots([]));
-  }, [step, serviceId, date, staffId, addOnIds]);
+    // eslint-disable-next-line
+  }, [step, serviceIds.join(","), date, staffId, addOnIds]);
 
-  function selectService(id: number) { setServiceId(id); setAddOnIds([]); }
+  function toggleService(id: number) {
+    setServiceIds((x) => {
+      const next = x.includes(id) ? x.filter((i) => i !== id) : [...x, id];
+      // Drop add-ons whose category no longer has a selected service.
+      const cats = new Set(next.map((sid) => allServices.find((s) => s.id === sid)?.categoryId));
+      setAddOnIds((a) => a.filter((aid) => cats.has(addOns.find((ad) => ad.id === aid)?.categoryId)));
+      return next;
+    });
+  }
   function toggleAddOn(id: number) { setAddOnIds((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id])); }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (busy || !serviceId || !date || !time) return;
+    if (busy || !serviceIds.length || !date || !time) return;
     if (!form.customerName.trim() || !form.customerPhone.trim()) { setErr("Please enter your name and phone."); return; }
     setBusy(true); setErr("");
     try {
-      const r = await api.post<{ appointment?: { staffName: string }; paymentPending?: boolean; redirectUrl?: string | null; reference?: string }>("/api/appointments", { serviceId, staffId, date, time, addOnIds, promoCode: promo?.code, paymentMethod: payMethod, ...form }, authHeader);
+      const r = await api.post<{ appointment?: { staffName: string }; paymentPending?: boolean; redirectUrl?: string | null; reference?: string }>("/api/appointments", { serviceIds, staffId, date, time, addOnIds, promoCode: promo?.code, paymentMethod: payMethod, ...form }, authHeader);
       if (r.paymentPending) {
         // Whish: go to the gateway if available, else our status page to await confirmation.
         if (r.redirectUrl) { window.location.href = r.redirectUrl; return; }
@@ -113,7 +133,7 @@ export function Book() {
         <h1 className="mt-4 font-display text-3xl font-extrabold text-ink">You're booked! 🎉</h1>
         <p className="mt-2 text-muted">See you soon at {SITE.name}.</p>
         <div className="card mt-6 p-5 text-left text-sm">
-          <Row k="Service" v={`${service?.name ?? ""}${selectedAddOns.length ? ` + ${selectedAddOns.map((a) => a.name).join(", ")}` : ""}`} />
+          <Row k={selectedServices.length > 1 ? "Services" : "Service"} v={`${serviceLabel}${selectedAddOns.length ? ` + ${selectedAddOns.map((a) => a.name).join(", ")}` : ""}`} />
           <Row k="When" v={`${prettyDate(done.date)} at ${done.time}`} />
           <Row k="With" v={done.staffName || "Our team"} />
           <Row k="Total" v={priceLabel(total)} />
@@ -157,7 +177,7 @@ export function Book() {
               <p className="mt-1 text-sm text-muted">{t("Choose a category to see our services.")}</p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {catalog.map((cat) => (
-                  <button key={cat.id} onClick={() => { setCatId(cat.id); setServiceId(null); setStep(1); }} className="lift group overflow-hidden rounded-[1.5rem] border border-border bg-surface text-left">
+                  <button key={cat.id} onClick={() => { setCatId(cat.id); setStep(1); }} className="lift group relative overflow-hidden rounded-[1.5rem] border border-border bg-surface text-left">
                     <div className="relative aspect-[4/3] overflow-hidden">
                       <img src={SITE.categoryImages[cat.name] ?? SITE.heroImage} alt={cat.name} loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
@@ -180,8 +200,11 @@ export function Book() {
                   <div className="grid gap-2 sm:grid-cols-2">
                     {cat.services.map((s) => (
                       <div key={s.id} className="relative">
-                        <button onClick={() => selectService(s.id)} className={`card flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-brand ${serviceId === s.id ? "border-brand ring-1 ring-brand" : ""} ${customer ? "pr-9" : ""}`}>
-                          <span><span className="block font-semibold text-ink">{s.name}</span><span className="text-xs text-muted">🕐 {durationLabel(s.durationMin)}</span></span>
+                        <button onClick={() => toggleService(s.id)} className={`card flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-brand ${serviceIds.includes(s.id) ? "border-brand ring-1 ring-brand" : ""} ${customer ? "pr-9" : ""}`}>
+                          <span className="flex items-center gap-2.5">
+                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[11px] font-bold transition ${serviceIds.includes(s.id) ? "border-brand bg-brand text-white" : "border-border bg-surface text-transparent"}`}>✓</span>
+                            <span><span className="block font-semibold text-ink">{s.name}</span><span className="text-xs text-muted">🕐 {durationLabel(s.durationMin)}</span></span>
+                          </span>
                           <span className="shrink-0 font-display font-bold text-brand">{priceLabel(s.price)}</span>
                         </button>
                         {customer && <button onClick={() => toggleFav(s.id)} aria-label="Favourite" className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-lg ${favIds.has(s.id) ? "text-brand" : "text-muted/50 hover:text-brand"}`}>{favIds.has(s.id) ? "♥" : "♡"}</button>}
@@ -192,7 +215,13 @@ export function Book() {
               ))}
               {!catalog.length && <p className="text-center text-muted">Loading…</p>}
 
-              {service && addOns.length > 0 && (
+              {selectedServices.length > 0 && (
+                <p className="rounded-xl bg-brand-soft/40 px-4 py-2.5 text-sm text-ink">
+                  💡 {t("You can pick more than one service")} — {t("they'll be booked back-to-back in one visit.")} <button onClick={() => { setCatId(null); setStep(0); }} className="font-semibold text-brand hover:underline">{t("Add from another category →")}</button>
+                </p>
+              )}
+
+              {selectedServices.length > 0 && addOns.length > 0 && (
                 <div className="card p-4">
                   <p className="font-semibold text-ink">Add-ons <span className="font-normal text-muted">(optional)</span></p>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -205,12 +234,15 @@ export function Book() {
                 </div>
               )}
 
-              <button onClick={() => { setStep(0); setServiceId(null); }} className="btn btn-ghost px-5 py-2 text-sm">{t("← Categories")}</button>
+              <button onClick={() => setStep(0)} className="btn btn-ghost px-5 py-2 text-sm">{t("← Categories")}</button>
 
-              {service && (
+              {selectedServices.length > 0 && (
                 <div className="sticky bottom-4 flex items-center justify-between gap-3 rounded-2xl bg-surface p-3 shadow-lg ring-1 ring-border">
-                  <span className="text-sm"><span className="font-semibold text-ink">{service.name}</span> · {durationLabel(totalMin)} · <span className="text-brand">{priceLabel(total)}</span></span>
-                  <button onClick={() => setStep(2)} className="btn btn-primary px-6 py-2.5">{t("Continue →")}</button>
+                  <span className="min-w-0 text-sm">
+                    <span className="block truncate font-semibold text-ink">{serviceLabel}</span>
+                    <span className="text-muted">{selectedServices.length > 1 ? `${selectedServices.length} services · ` : ""}{durationLabel(totalMin)} · <span className="font-semibold text-brand">{priceLabel(total)}</span></span>
+                  </span>
+                  <button onClick={() => setStep(2)} className="btn btn-primary shrink-0 px-6 py-2.5">{t("Continue →")}</button>
                 </div>
               )}
             </div>
@@ -220,9 +252,15 @@ export function Book() {
           {step === 2 && (
             <div>
               <h2 className="font-display text-xl font-bold text-ink">{t("Choose your specialist")}</h2>
-              {eligibleStaff.length > 1 && <p className="mt-1 text-sm text-muted">{service?.name} is done by {eligibleStaff.length} of our specialists.</p>}
+              {eligibleStaff.length > 1 && <p className="mt-1 text-sm text-muted">{serviceLabel} {selectedServices.length > 1 ? "are" : "is"} done by {eligibleStaff.length} of our specialists.</p>}
+              {selectedServices.length > 1 && eligibleStaff.length === 0 && (
+                <div className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
+                  No single specialist offers all of those services together — please book them as separate visits.
+                  <button onClick={() => setStep(1)} className="ml-1 font-semibold text-brand hover:underline">{t("← Change services")}</button>
+                </div>
+              )}
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <button onClick={() => { setStaffId(null); setStep(3); }} className={`card p-4 text-left transition hover:border-brand ${staffId === null ? "border-brand" : ""}`}>
+                <button disabled={selectedServices.length > 1 && eligibleStaff.length === 0} onClick={() => { setStaffId(null); setStep(3); }} className={`card p-4 text-left transition hover:border-brand disabled:cursor-not-allowed disabled:opacity-40 ${staffId === null ? "border-brand" : ""}`}>
                   <p className="font-semibold text-ink">✨ Any available</p>
                   <p className="text-xs text-muted">First free specialist — most flexible times</p>
                 </button>
@@ -268,8 +306,9 @@ export function Book() {
           {step === 4 && service && (
             <form onSubmit={submit} className="space-y-4">
               <div className="card p-4 text-sm">
-                <p className="font-display text-lg font-bold text-ink">{service.name}{selectedAddOns.length ? ` + ${selectedAddOns.map((a) => a.name).join(", ")}` : ""}</p>
+                <p className="font-display text-lg font-bold text-ink">{serviceLabel}{selectedAddOns.length ? ` + ${selectedAddOns.map((a) => a.name).join(", ")}` : ""}</p>
                 <p className="mt-1 text-muted">{prettyDate(date)} at {time} · {durationLabel(totalMin)} · {priceLabel(total)}{staffId ? ` · with ${staff.find((s) => s.id === staffId)?.name}` : ""}</p>
+                {selectedServices.length > 1 && <p className="mt-1 text-xs text-muted">{selectedServices.length} services, one after the other in the same visit.</p>}
               </div>
               <PromoField amount={total} authHeader={authHeader} applied={promo} onApply={setPromo} onClear={() => setPromo(null)} />
               {promo && <p className="text-right text-sm font-semibold text-ink">Total after discount: <span className="text-brand">{priceLabel(Math.max(0, total - promo.discount))}</span></p>}
