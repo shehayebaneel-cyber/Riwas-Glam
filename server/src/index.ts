@@ -645,7 +645,7 @@ app.get("/api/payments/:reference", async (req, res) => {
 app.get("/api/receipts/:reference", async (req, res) => {
   const p = await prisma.payment.findUnique({ where: { reference: STR(req.params.reference, 40).toUpperCase() } });
   if (!p) return res.status(404).json({ error: "Receipt not found." });
-  const sc = { ...SITE_CONTENT_DEFAULT, ...(await getSetting("siteContent", {} as Record<string, unknown>)) } as Record<string, string>;
+  const sc = { ...SITE_CONTENT_DEFAULT, ...(await getSetting("siteContent", {} as Record<string, unknown>)) } as unknown as Record<string, string>;
   const out: Record<string, unknown> = {
     reference: p.reference,
     kind: p.kind,
@@ -3418,7 +3418,7 @@ app.patch("/api/customer/me/appointments/:id/reschedule", requireCustomer, async
   const date = STR(req.body?.date, 10),
     time = STR(req.body?.time, 5);
   if (!isDate(date) || !isTime(time)) return res.status(400).json({ error: "Pick a valid new date and time." });
-  const service = await prisma.service.findUnique({ where: { id: a.serviceId }, include: { staff: true } });
+  const service = a.serviceId == null ? null : await prisma.service.findUnique({ where: { id: a.serviceId }, include: { staff: true } });
   let rows = service?.staff.filter((s) => s.isActive) ?? [];
   if (!rows.length) rows = await prisma.staff.findMany({ where: { isActive: true } });
   const eligible = rows.map((s) => ({
@@ -3453,7 +3453,7 @@ app.get("/api/customer/me/appointments/:id/slots", requireCustomer, async (req, 
   if (!a || a.customerId !== custOf(req)) return res.status(404).json({ error: "Appointment not found." });
   const date = STR((req.query as Record<string, string>).date, 10);
   if (!isDate(date)) return res.status(400).json({ error: "Invalid date." });
-  const service = await prisma.service.findUnique({ where: { id: a.serviceId }, include: { staff: true } });
+  const service = a.serviceId == null ? null : await prisma.service.findUnique({ where: { id: a.serviceId }, include: { staff: true } });
   let rows = service?.staff.filter((s) => s.isActive) ?? [];
   if (!rows.length) rows = await prisma.staff.findMany({ where: { isActive: true } });
   const eligible = rows.map((s) => ({
