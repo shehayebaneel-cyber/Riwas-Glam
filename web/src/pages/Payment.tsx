@@ -37,7 +37,10 @@ export function Payment() {
       }
     }
     poll();
-    return () => { alive = false; if (timer.current) clearTimeout(timer.current); };
+    return () => {
+      alive = false;
+      if (timer.current) clearTimeout(timer.current);
+    };
   }, [reference]);
 
   const wa = `https://wa.me/${SITE.whatsapp}`;
@@ -48,38 +51,40 @@ export function Payment() {
         {err && (
           <div className="card p-8 text-center">
             <div className="text-4xl">🔍</div>
-            <p className="mt-3 font-display text-xl font-bold text-ink">Order not found</p>
-            <p className="mt-1 text-sm text-muted">{err}</p>
-            <Link to="/" className="btn btn-ghost mt-5 px-6 py-2.5">Back to home</Link>
+            <p className="font-display text-ink mt-3 text-xl font-bold">Order not found</p>
+            <p className="text-muted mt-1 text-sm">{err}</p>
+            <Link to="/" className="btn btn-ghost mt-5 px-6 py-2.5">
+              Back to home
+            </Link>
           </div>
         )}
 
-        {!err && !p && <p className="py-10 text-center text-muted">Loading…</p>}
+        {!err && !p && <p className="text-muted py-10 text-center">Loading…</p>}
 
         {p && (
           <div className="card p-7 text-center">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted">Reference</p>
-            <p className="font-mono text-sm font-bold text-ink">{p.reference}</p>
+            <p className="text-muted text-xs uppercase tracking-[0.2em]">Reference</p>
+            <p className="text-ink font-mono text-sm font-bold">{p.reference}</p>
 
             {/* PAID */}
             {p.status === "PAID" && (
               <>
                 <div className="mx-auto mt-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-3xl text-emerald-600">✓</div>
-                <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">Payment confirmed</h1>
+                <h1 className="font-display text-ink mt-4 text-2xl font-extrabold">Payment confirmed</h1>
                 {p.kind === "GIFTCARD" && p.giftCard && (
                   <>
-                    <p className="mt-1 text-sm text-muted">Your {money(p.amount)} gift card is ready 🎁</p>
-                    <div className="mt-4 rounded-2xl bg-brand-soft p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted">Gift card code</p>
-                      <p className="mt-1 font-mono text-lg font-bold text-brand-dark">{p.giftCard.code}</p>
+                    <p className="text-muted mt-1 text-sm">Your {money(p.amount)} gift card is ready 🎁</p>
+                    <div className="bg-brand-soft mt-4 rounded-2xl p-4">
+                      <p className="text-muted text-xs uppercase tracking-wide">Gift card code</p>
+                      <p className="text-brand-dark mt-1 font-mono text-lg font-bold">{p.giftCard.code}</p>
                     </div>
-                    <p className="mt-3 text-sm text-muted">Present this code at the salon to redeem.</p>
+                    <p className="text-muted mt-3 text-sm">Present this code at the salon to redeem.</p>
                   </>
                 )}
                 {p.kind === "BOOKING" && p.booking && (
                   <>
-                    <p className="mt-1 text-sm text-muted">You're all booked — see you soon!</p>
-                    <div className="mt-4 rounded-2xl bg-surface-2 p-4 text-left text-sm">
+                    <p className="text-muted mt-1 text-sm">You're all booked — see you soon!</p>
+                    <div className="bg-surface-2 mt-4 rounded-2xl p-4 text-left text-sm">
                       <Row k="Service" v={p.booking.serviceName} />
                       <Row k="When" v={`${prettyDate(p.booking.date)} at ${p.booking.time}`} />
                       <Row k="With" v={p.booking.staffName || "Our team"} />
@@ -88,27 +93,39 @@ export function Payment() {
                   </>
                 )}
                 <div className="mt-5 flex flex-col items-center gap-1">
-                  <QRCode value={p.kind === "GIFTCARD" && p.giftCard ? p.giftCard.code : (typeof window !== "undefined" ? window.location.href : p.reference)} size={128} />
-                  <p className="text-[11px] text-muted">{p.kind === "GIFTCARD" ? "Scan at the salon to redeem" : "Scan to reopen this order"}</p>
+                  <QRCode
+                    value={p.kind === "GIFTCARD" && p.giftCard ? p.giftCard.code : typeof window !== "undefined" ? window.location.href : p.reference}
+                    size={128}
+                  />
+                  <p className="text-muted text-[11px]">{p.kind === "GIFTCARD" ? "Scan at the salon to redeem" : "Scan to reopen this order"}</p>
                 </div>
-                <Link to={`/receipt/${p.reference}`} className="mt-4 block text-center text-sm font-semibold text-brand">View / print receipt →</Link>
-                <Link to="/" className="btn btn-primary mt-3 w-full py-3">Back to home</Link>
+                <Link to={`/receipt/${p.reference}`} className="text-brand mt-4 block text-center text-sm font-semibold">
+                  View / print receipt →
+                </Link>
+                <Link to="/" className="btn btn-primary mt-3 w-full py-3">
+                  Back to home
+                </Link>
               </>
             )}
 
             {/* PENDING */}
             {p.status === "PENDING" && (
               <>
-                <div className="mx-auto mt-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-soft text-3xl">⏳</div>
-                <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">Awaiting payment</h1>
-                <p className="mt-1 text-sm text-muted">
-                  Your {p.kind === "GIFTCARD" ? "gift card" : "booking"} of {money(p.amount)} is reserved. Online Whish payment is being set up — we'll reach out to finish it, or you can pay us directly.
+                <div className="bg-brand-soft mx-auto mt-5 flex h-16 w-16 items-center justify-center rounded-full text-3xl">⏳</div>
+                <h1 className="font-display text-ink mt-4 text-2xl font-extrabold">Awaiting payment</h1>
+                <p className="text-muted mt-1 text-sm">
+                  Your {p.kind === "GIFTCARD" ? "gift card" : "booking"} of {money(p.amount)} is reserved. Online Whish payment is being set up — we'll reach
+                  out to finish it, or you can pay us directly.
                 </p>
                 <div className="mt-5 flex flex-col gap-2">
-                  <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary py-3">Message us to pay</a>
-                  <Link to="/" className="btn btn-ghost py-2.5">Back to home</Link>
+                  <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary py-3">
+                    Message us to pay
+                  </a>
+                  <Link to="/" className="btn btn-ghost py-2.5">
+                    Back to home
+                  </Link>
                 </div>
-                <p className="mt-3 text-xs text-muted">This page updates automatically once payment is confirmed.</p>
+                <p className="text-muted mt-3 text-xs">This page updates automatically once payment is confirmed.</p>
               </>
             )}
 
@@ -116,11 +133,15 @@ export function Payment() {
             {(p.status === "FAILED" || p.status === "CANCELLED") && (
               <>
                 <div className="mx-auto mt-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/15 text-3xl text-red-600">✕</div>
-                <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">Payment {p.status.toLowerCase()}</h1>
-                <p className="mt-1 text-sm text-muted">This order wasn't completed. You can try again or reach out and we'll help.</p>
+                <h1 className="font-display text-ink mt-4 text-2xl font-extrabold">Payment {p.status.toLowerCase()}</h1>
+                <p className="text-muted mt-1 text-sm">This order wasn't completed. You can try again or reach out and we'll help.</p>
                 <div className="mt-5 flex flex-col gap-2">
-                  <Link to={p.kind === "GIFTCARD" ? "/gift-cards" : "/book"} className="btn btn-primary py-3">Try again</Link>
-                  <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost py-2.5">Message us</a>
+                  <Link to={p.kind === "GIFTCARD" ? "/gift-cards" : "/book"} className="btn btn-primary py-3">
+                    Try again
+                  </Link>
+                  <a href={wa} target="_blank" rel="noreferrer" className="btn btn-ghost py-2.5">
+                    Message us
+                  </a>
                 </div>
               </>
             )}
@@ -132,5 +153,10 @@ export function Payment() {
 }
 
 function Row({ k, v }: { k: string; v: string }) {
-  return <div className="flex justify-between gap-3 border-b border-border py-2 last:border-0"><span className="text-muted">{k}</span><span className="font-semibold text-ink">{v}</span></div>;
+  return (
+    <div className="border-border flex justify-between gap-3 border-b py-2 last:border-0">
+      <span className="text-muted">{k}</span>
+      <span className="text-ink font-semibold">{v}</span>
+    </div>
+  );
 }

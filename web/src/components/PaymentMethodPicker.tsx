@@ -14,7 +14,7 @@ const OPTIONS: { key: PayMethod; title: string; desc: string; icon: React.ReactN
 export function PaymentMethodPicker({ value, onChange }: { value: PayMethod; onChange: (m: PayMethod) => void }) {
   return (
     <div>
-      <p className="mb-2 text-sm font-semibold text-ink">Payment method</p>
+      <p className="text-ink mb-2 text-sm font-semibold">Payment method</p>
       <div className="grid grid-cols-2 gap-3">
         {OPTIONS.map((o) => {
           const active = value === o.key;
@@ -24,16 +24,16 @@ export function PaymentMethodPicker({ value, onChange }: { value: PayMethod; onC
               type="button"
               onClick={() => onChange(o.key)}
               aria-pressed={active}
-              className={`flex flex-col gap-1 rounded-2xl border p-4 text-left transition active:scale-[0.98] ${active ? "border-brand bg-brand-soft/40 ring-1 ring-brand" : "border-border bg-surface hover:border-brand"}`}
+              className={`flex flex-col gap-1 rounded-2xl border p-4 text-left transition active:scale-[0.98] ${active ? "border-brand bg-brand-soft/40 ring-brand ring-1" : "border-border bg-surface hover:border-brand"}`}
             >
               <span className="flex h-8 items-center">{o.icon}</span>
-              <span className="mt-1 font-semibold text-ink">{o.title}</span>
-              <span className="text-xs text-muted">{o.desc}</span>
+              <span className="text-ink mt-1 font-semibold">{o.title}</span>
+              <span className="text-muted text-xs">{o.desc}</span>
             </button>
           );
         })}
       </div>
-      <p className="mt-2 text-xs text-muted">
+      <p className="text-muted mt-2 text-xs">
         {value === "CASH"
           ? "Your spot is reserved now — pay in cash when you arrive."
           : "You'll be taken to Whish to pay securely. Your order is confirmed once payment succeeds."}

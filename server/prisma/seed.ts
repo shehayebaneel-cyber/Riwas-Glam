@@ -40,8 +40,11 @@ async function main() {
     const cat = await prisma.category.create({ data: { name: c.name, emoji: EMOJI[c.name] ?? "🌸", sortOrder: ci } });
     const ids: number[] = [];
     for (const [si, s] of c.services.entries()) {
-      const svc = await prisma.service.create({ data: { categoryId: cat.id, name: s.name, description: s.description, durationMin: s.durationMin, price: s.price, sortOrder: si } });
-      ids.push(svc.id); svcCount++;
+      const svc = await prisma.service.create({
+        data: { categoryId: cat.id, name: s.name, description: s.description, durationMin: s.durationMin, price: s.price, sortOrder: si },
+      });
+      ids.push(svc.id);
+      svcCount++;
     }
     svcByCat.set(c.name, ids);
   }
@@ -52,9 +55,14 @@ async function main() {
     const login = s.name.toLowerCase().split(" ")[0]; // "riwa", "sana", "aura", "nail"
     await prisma.staff.create({
       data: {
-        name: s.name, role: s.role, commissionPct: s.commissionPct, sortOrder: i,
-        schedule: JSON.stringify(week()), blockedDates: "[]",
-        loginEmail: login, passwordHash: pass,
+        name: s.name,
+        role: s.role,
+        commissionPct: s.commissionPct,
+        sortOrder: i,
+        schedule: JSON.stringify(week()),
+        blockedDates: "[]",
+        loginEmail: login,
+        passwordHash: pass,
         services: { connect: serviceIds.map((id) => ({ id })) },
       },
     });
@@ -71,4 +79,9 @@ async function main() {
 
   console.log(`Seeded ${catalog.length} categories, ${svcCount} services, ${STAFF.length} staff, and ${REVIEWS.length} sample reviews.`);
 }
-main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

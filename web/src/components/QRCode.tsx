@@ -7,10 +7,14 @@ export function QRCode({ value, size = 132, className = "" }: { value: string; s
   useEffect(() => {
     let alive = true;
     QR.toDataURL(value, { margin: 1, width: size * 2, color: { dark: "#4a3330", light: "#ffffff" } })
-      .then((url) => { if (alive) setSrc(url); })
+      .then((url) => {
+        if (alive) setSrc(url);
+      })
       .catch(() => {});
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [value, size]);
-  if (!src) return <div style={{ width: size, height: size }} className={`rounded-xl bg-surface-2 ${className}`} />;
+  if (!src) return <div style={{ width: size, height: size }} className={`bg-surface-2 rounded-xl ${className}`} />;
   return <img src={src} alt="QR code" width={size} height={size} className={`rounded-xl ${className}`} />;
 }

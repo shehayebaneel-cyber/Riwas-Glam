@@ -5,7 +5,8 @@ import { SITE } from "../config";
 export function waDigits(phone: string): string {
   let d = (phone || "").replace(/\D/g, "");
   if (!d) return "";
-  if (d.length === 8) d = "961" + d;            // local Lebanese mobile
+  if (d.length === 8)
+    d = "961" + d; // local Lebanese mobile
   else if (d.startsWith("0")) d = "961" + d.slice(1);
   return d;
 }
@@ -22,11 +23,29 @@ type Appt = { customerName: string; serviceName: string; date: string; time: str
 
 // Ready-made, warm messages the owner can send in one tap (she still presses send in WhatsApp).
 export const waMessages = {
-  confirmation: (a: Appt) => fill("Hi {name} 💖 Your {service} appointment on {date} at {time} is confirmed. See you soon! — {salon}", { name: a.customerName, service: a.serviceName, date: a.date, time: a.time, salon: SITE.name }),
-  reminder: (a: Appt) => fill("Hi {name} 💐 A little reminder for your {service} appointment on {date} at {time}. Can't wait to see you! — {salon}", { name: a.customerName, service: a.serviceName, date: a.date, time: a.time, salon: SITE.name }),
-  thanks: (a: Appt) => fill("Hi {name} ✨ Thank you for visiting {salon} today! If you enjoyed your {service} we'd love a quick review 💕", { name: a.customerName, service: a.serviceName, salon: SITE.name }),
+  confirmation: (a: Appt) =>
+    fill("Hi {name} 💖 Your {service} appointment on {date} at {time} is confirmed. See you soon! — {salon}", {
+      name: a.customerName,
+      service: a.serviceName,
+      date: a.date,
+      time: a.time,
+      salon: SITE.name,
+    }),
+  reminder: (a: Appt) =>
+    fill("Hi {name} 💐 A little reminder for your {service} appointment on {date} at {time}. Can't wait to see you! — {salon}", {
+      name: a.customerName,
+      service: a.serviceName,
+      date: a.date,
+      time: a.time,
+      salon: SITE.name,
+    }),
+  thanks: (a: Appt) =>
+    fill("Hi {name} ✨ Thank you for visiting {salon} today! If you enjoyed your {service} we'd love a quick review 💕", {
+      name: a.customerName,
+      service: a.serviceName,
+      salon: SITE.name,
+    }),
 };
 
 // Default offer/broadcast text. {name} is replaced per-customer when sending.
-export const defaultOffer = () =>
-  `Hi {name}! 💖 This week at ${SITE.name}: [describe your offer here]. Book now at ${bookingUrl()} — see you soon! ✨`;
+export const defaultOffer = () => `Hi {name}! 💖 This week at ${SITE.name}: [describe your offer here]. Book now at ${bookingUrl()} — see you soon! ✨`;

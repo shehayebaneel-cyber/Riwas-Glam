@@ -15,13 +15,26 @@ function pretty(d: string) {
 /** Slim "next opening" pill for the homepage hero — one tap to book. */
 export function AvailabilityWidget() {
   const [a, setA] = useState<Avail | null>(null);
-  useEffect(() => { api.get<Avail>("/api/next-availability").then(setA).catch(() => {}); }, []);
+  useEffect(() => {
+    api
+      .get<Avail>("/api/next-availability")
+      .then(setA)
+      .catch(() => {});
+  }, []);
   if (!a || a.closed || !a.next) return null;
   return (
-    <Link to="/book" className="mt-5 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm shadow-sm transition hover:border-brand active:scale-[0.98]">
-      <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" /></span>
-      <span className="font-semibold text-ink">Next opening {pretty(a.next.date)} at {a.next.time}</span>
-      <span className="font-semibold text-brand">Book →</span>
+    <Link
+      to="/book"
+      className="border-border bg-surface hover:border-brand mt-5 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-sm transition active:scale-[0.98]"
+    >
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+      </span>
+      <span className="text-ink font-semibold">
+        Next opening {pretty(a.next.date)} at {a.next.time}
+      </span>
+      <span className="text-brand font-semibold">Book →</span>
     </Link>
   );
 }

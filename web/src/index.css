@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #fceef3;         /* soft blush pink */
-  --surface: #ffffff;    /* white cards */
-  --surface-2: #f9e2ea;  /* deeper blush */
-  --ink: #4a3330;        /* dark brown text */
-  --muted: #a98a92;      /* muted mauve */
-  --border: #f3dde4;     /* soft pink border */
-  --brand: #d97c9a;      /* dusty rose */
+  --bg: #fceef3; /* soft blush pink */
+  --surface: #ffffff; /* white cards */
+  --surface-2: #f9e2ea; /* deeper blush */
+  --ink: #4a3330; /* dark brown text */
+  --muted: #a98a92; /* muted mauve */
+  --border: #f3dde4; /* soft pink border */
+  --brand: #d97c9a; /* dusty rose */
   --brand-dark: #c26480; /* deeper rose */
   --brand-soft: #fbe4ec; /* soft pink wash */
-  --accent: #c8a86a;     /* champagne gold */
+  --accent: #c8a86a; /* champagne gold */
 }
 
 @theme inline {
@@ -38,53 +38,164 @@ body {
 
 /* Mobile touch polish: no blue tap flash, smooth in-page scrolling, and
    anchor targets that clear the sticky header instead of hiding beneath it. */
-* { -webkit-tap-highlight-color: transparent; }
-html { scroll-behavior: smooth; scroll-padding-top: 5.5rem; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
 
-.font-display { font-family: var(--font-display); }
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.font-display {
+  font-family: var(--font-display);
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* Premium micro-interactions */
-@keyframes fadeUp { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
-.reveal { opacity: 0; }
-.reveal.in { animation: fadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.lift { transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.35s; }
-.lift:hover { transform: translateY(-6px); box-shadow: 0 28px 60px -26px rgba(176, 104, 127, 0.5); }
-.glass { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.float-slow { animation: floaty 7s ease-in-out infinite; }
-.btn:hover { transform: translateY(-1px); }
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+.reveal {
+  opacity: 0;
+}
+.reveal.in {
+  animation: fadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.lift {
+  transition:
+    transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.35s;
+}
+.lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 28px 60px -26px rgba(176, 104, 127, 0.5);
+}
+.glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.float-slow {
+  animation: floaty 7s ease-in-out infinite;
+}
+.btn:hover {
+  transform: translateY(-1px);
+}
 
 @layer components {
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[0.97]; }
-  .btn-primary { @apply bg-brand text-white hover:bg-brand-dark; box-shadow: 0 12px 26px -12px rgba(176, 104, 127, 0.65); }
-  .btn-gold { @apply bg-accent text-white hover:opacity-90; }
-  .btn-ghost { @apply border border-border bg-surface text-ink hover:bg-surface-2; }
-  .card { @apply rounded-[1.75rem] border border-border bg-surface; box-shadow: 0 18px 46px -24px rgba(176, 104, 127, 0.32); }
-  .input { @apply w-full rounded-2xl border border-border bg-surface px-4 py-3 text-ink outline-none transition focus:border-brand; }
-  .chip { @apply rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand; }
-  .chip-active { @apply border-brand bg-brand text-white; }
-  .section { @apply mx-auto max-w-6xl px-5 py-16 sm:px-4 sm:py-28; }
-  .eyebrow { @apply text-sm font-semibold uppercase tracking-[0.25em] text-brand; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[0.97];
+  }
+  .btn-primary {
+    @apply bg-brand hover:bg-brand-dark text-white;
+    box-shadow: 0 12px 26px -12px rgba(176, 104, 127, 0.65);
+  }
+  .btn-gold {
+    @apply bg-accent text-white hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply border-border bg-surface text-ink hover:bg-surface-2 border;
+  }
+  .card {
+    @apply border-border bg-surface rounded-[1.75rem] border;
+    box-shadow: 0 18px 46px -24px rgba(176, 104, 127, 0.32);
+  }
+  .input {
+    @apply border-border bg-surface text-ink focus:border-brand w-full rounded-2xl border px-4 py-3 outline-none transition;
+  }
+  .chip {
+    @apply border-border bg-surface text-ink hover:border-brand rounded-full border px-4 py-2 text-sm font-semibold transition;
+  }
+  .chip-active {
+    @apply border-brand bg-brand text-white;
+  }
+  .section {
+    @apply mx-auto max-w-6xl px-5 py-16 sm:px-4 sm:py-28;
+  }
+  .eyebrow {
+    @apply text-brand text-sm font-semibold uppercase tracking-[0.25em];
+  }
 }
 
 /* Print / Save-as-PDF: show only the .printable region. */
 @media print {
-  body * { visibility: hidden; }
-  .printable, .printable * { visibility: visible; }
-  .printable { position: absolute; inset: 0; margin: 0; padding: 24px; }
-  .no-print { display: none !important; }
+  body * {
+    visibility: hidden;
+  }
+  .printable,
+  .printable * {
+    visibility: visible;
+  }
+  .printable {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 24px;
+  }
+  .no-print {
+    display: none !important;
+  }
 }
 
 /* Right-to-left (Arabic) layout fixes for physical utility classes. */
-[dir="rtl"] .ml-auto { margin-left: 0; margin-inline-start: auto; }
-[dir="rtl"] .mr-auto { margin-right: 0; margin-inline-end: auto; }
-[dir="rtl"] .text-left { text-align: right; }
-[dir="rtl"] .text-right { text-align: left; }
+[dir="rtl"] .ml-auto {
+  margin-left: 0;
+  margin-inline-start: auto;
+}
+[dir="rtl"] .mr-auto {
+  margin-right: 0;
+  margin-inline-end: auto;
+}
+[dir="rtl"] .text-left {
+  text-align: right;
+}
+[dir="rtl"] .text-right {
+  text-align: left;
+}
 
 /* Calendar appointment cards: fade in on load; lift is handled by Tailwind hover. */
-@keyframes rgApptIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.rg-appt { animation: rgApptIn 0.22s ease-out both; }
-@media (prefers-reduced-motion: reduce) { .rg-appt { animation: none; } }
+@keyframes rgApptIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rg-appt {
+  animation: rgApptIn 0.22s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rg-appt {
+    animation: none;
+  }
+}

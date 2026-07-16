@@ -54,7 +54,10 @@ const STATUS: Record<string, { label: string; chip: string }> = {
 };
 const st = (s: string) => STATUS[s] ?? STATUS.CONFIRMED;
 
-const toMin = (t: string) => { const [h, m] = (t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+const toMin = (t: string) => {
+  const [h, m] = (t || "0:0").split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
 const pad = (n: number) => String(n).padStart(2, "0");
 const hoursBetween = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, i) => a + i);
 const fmtHour = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`;
@@ -66,9 +69,13 @@ function layout(list: Appointment[]) {
   const sorted = [...list].sort((a, b) => toMin(a.time) - toMin(b.time) || (b.durationMin || 30) - (a.durationMin || 30));
   const laneEnds: number[] = [];
   const placed = sorted.map((a) => {
-    const s = toMin(a.time), e = s + Math.max(a.durationMin || 30, 20);
+    const s = toMin(a.time),
+      e = s + Math.max(a.durationMin || 30, 20);
     let lane = laneEnds.findIndex((end) => end <= s);
-    if (lane < 0) { lane = laneEnds.length; laneEnds.push(e); } else laneEnds[lane] = e;
+    if (lane < 0) {
+      lane = laneEnds.length;
+      laneEnds.push(e);
+    } else laneEnds[lane] = e;
     return { a, s, e, lane };
   });
   return { placed, laneCount: Math.max(1, laneEnds.length) };
@@ -96,27 +103,41 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
   }, [staff]);
   const themeFor = (id?: number | null) => (id != null ? themeById.get(id) : undefined) ?? NEUTRAL;
 
-  useEffect(() => { api.get<StaffFull[]>("/api/admin/staff", H).then(setStaff).catch(() => {}); /* eslint-disable-next-line */ }, []);
+  useEffect(() => {
+    api
+      .get<StaffFull[]>("/api/admin/staff", H)
+      .then(setStaff)
+      .catch(() => {}); /* eslint-disable-next-line */
+  }, []);
 
   function load() {
-    const url = view === "day"
-      ? `/api/admin/appointments?date=${anchor}`
-      : `/api/admin/appointments?from=${week[0]}&to=${week[6]}`;
-    api.get<Appointment[]>(url, H).then(setAppts).catch(() => setAppts([]));
+    const url = view === "day" ? `/api/admin/appointments?date=${anchor}` : `/api/admin/appointments?from=${week[0]}&to=${week[6]}`;
+    api
+      .get<Appointment[]>(url, H)
+      .then(setAppts)
+      .catch(() => setAppts([]));
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [view, anchor]);
-  useEffect(() => { localStorage.setItem("rg-cal-view", view); }, [view]);
+  useEffect(() => {
+    load(); /* eslint-disable-next-line */
+  }, [view, anchor]);
+  useEffect(() => {
+    localStorage.setItem("rg-cal-view", view);
+  }, [view]);
 
   // The staff whose schedules/appointments matter for the current view.
   const relevantStaff = useMemo(() => (staffFilter === "all" ? active : active.filter((s) => s.id === staffFilter)), [active, staffFilter]);
 
   // Salon hours for a given day (union across the relevant staff), or null if closed.
   const workingHours = (iso: string): { open: number; close: number } | null => {
-    let open = Infinity, close = -Infinity;
+    let open = Infinity,
+      close = -Infinity;
     for (const s of relevantStaff) {
       if (s.blockedDates?.includes(iso)) continue;
       const d = s.schedule?.[parseDay(iso).getDay()];
-      if (d && !d.off) { open = Math.min(open, toMin(d.open)); close = Math.max(close, toMin(d.close)); }
+      if (d && !d.off) {
+        open = Math.min(open, toMin(d.open));
+        close = Math.max(close, toMin(d.close));
+      }
     }
     return open < close ? { open, close } : null;
   };
@@ -124,41 +145,75 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
   // Grid hour range = union of the relevant staff working hours + any appointment
   // that spills outside them, clamped to a sensible default.
   const { startH, endH } = useMemo(() => {
-    let min = 9 * 60, max = 19 * 60;
-    for (const a of appts) { const s = toMin(a.time); min = Math.min(min, s); max = Math.max(max, s + (a.durationMin || 60)); }
-    const days = view === "day" ? [anchor] : week;
-    for (const s of relevantStaff) for (const iso of days) {
-      if (s.blockedDates?.includes(iso)) continue;
-      const d = s.schedule?.[parseDay(iso).getDay()];
-      if (d && !d.off) { min = Math.min(min, toMin(d.open)); max = Math.max(max, toMin(d.close)); }
+    let min = 9 * 60,
+      max = 19 * 60;
+    for (const a of appts) {
+      const s = toMin(a.time);
+      min = Math.min(min, s);
+      max = Math.max(max, s + (a.durationMin || 60));
     }
+    const days = view === "day" ? [anchor] : week;
+    for (const s of relevantStaff)
+      for (const iso of days) {
+        if (s.blockedDates?.includes(iso)) continue;
+        const d = s.schedule?.[parseDay(iso).getDay()];
+        if (d && !d.off) {
+          min = Math.min(min, toMin(d.open));
+          max = Math.max(max, toMin(d.close));
+        }
+      }
     return { startH: Math.max(0, Math.floor(min / 60)), endH: Math.min(24, Math.max(Math.ceil(max / 60), Math.floor(min / 60) + 1)) };
   }, [appts, relevantStaff, view, anchor, week]);
 
   const step = (dir: number) => setAnchor((a) => addDaysIso(a, dir * (view === "week" ? 7 : 1)));
-  const label = view === "day"
-    ? parseDay(anchor).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
-    : `${parseDay(week[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${parseDay(week[6]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  const label =
+    view === "day"
+      ? parseDay(anchor).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
+      : `${parseDay(week[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${parseDay(week[6]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
   return (
     <div>
       {/* ---------- Toolbar ---------- */}
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => setNewSlot({ date: anchor, time: "", staffId: "" })} className="btn btn-primary px-4 py-2 text-sm">+ New booking</button>
+        <button onClick={() => setNewSlot({ date: anchor, time: "", staffId: "" })} className="btn btn-primary px-4 py-2 text-sm">
+          + New booking
+        </button>
 
         <div className="flex items-center gap-1.5">
-          <button onClick={() => step(-1)} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand" aria-label="Previous">← <span className="hidden sm:inline">{view === "week" ? "Prev week" : "Prev"}</span></button>
-          <button onClick={() => setAnchor(todayIso())} className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white shadow transition hover:opacity-90">Today</button>
-          <button onClick={() => step(1)} className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand" aria-label="Next"><span className="hidden sm:inline">{view === "week" ? "Next week" : "Next"}</span> →</button>
+          <button
+            onClick={() => step(-1)}
+            className="border-border text-ink hover:border-brand hover:text-brand rounded-full border px-3 py-1.5 text-sm font-semibold transition"
+            aria-label="Previous"
+          >
+            ← <span className="hidden sm:inline">{view === "week" ? "Prev week" : "Prev"}</span>
+          </button>
+          <button
+            onClick={() => setAnchor(todayIso())}
+            className="bg-brand rounded-full px-4 py-1.5 text-sm font-bold text-white shadow transition hover:opacity-90"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => step(1)}
+            className="border-border text-ink hover:border-brand hover:text-brand rounded-full border px-3 py-1.5 text-sm font-semibold transition"
+            aria-label="Next"
+          >
+            <span className="hidden sm:inline">{view === "week" ? "Next week" : "Next"}</span> →
+          </button>
         </div>
 
-        <p className="font-display text-lg font-extrabold text-ink sm:text-xl">{label}</p>
+        <p className="font-display text-ink text-lg font-extrabold sm:text-xl">{label}</p>
 
         {/* Day | Week (Month drops in here later) */}
-        <div className="ms-auto flex gap-1 rounded-full bg-surface-2 p-1">
+        <div className="bg-surface-2 ms-auto flex gap-1 rounded-full p-1">
           {(["day", "week"] as View[]).map((v) => (
-            <button key={v} onClick={() => setView(v)}
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize transition ${view === v ? "bg-brand text-white shadow" : "text-muted hover:text-ink"}`}>{v}</button>
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize transition ${view === v ? "bg-brand text-white shadow" : "text-muted hover:text-ink"}`}
+            >
+              {v}
+            </button>
           ))}
         </div>
       </div>
@@ -166,42 +221,113 @@ export function CalendarAdmin({ adminKey }: { adminKey: string }) {
       {/* Legend (staff colour pills) + status key + (week) staff filter */}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          {active.map((s) => { const t = themeFor(s.id); return (
-            <span key={s.id} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${t.bg} ${t.text}`}>
-              <span className={`h-2 w-2 rounded-full ${t.dot}`} />{s.name}
-            </span>
-          ); })}
+          {active.map((s) => {
+            const t = themeFor(s.id);
+            return (
+              <span key={s.id} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${t.bg} ${t.text}`}>
+                <span className={`h-2 w-2 rounded-full ${t.dot}`} />
+                {s.name}
+              </span>
+            );
+          })}
         </div>
-        <span className="hidden text-[11px] text-muted lg:inline">✓ done · ⚠ no-show · ✕ cancelled · ◔ pending</span>
+        <span className="text-muted hidden text-[11px] lg:inline">✓ done · ⚠ no-show · ✕ cancelled · ◔ pending</span>
         {view === "week" && (
-          <select value={String(staffFilter)} onChange={(e) => setStaffFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
-            className="input !w-auto !py-1.5 text-sm ms-auto">
+          <select
+            value={String(staffFilter)}
+            onChange={(e) => setStaffFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+            className="input ms-auto !w-auto !py-1.5 text-sm"
+          >
             <option value="all">All specialists</option>
-            {active.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {active.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
           </select>
         )}
       </div>
 
       {/* ---------- Views ---------- */}
-      {view === "day"
-        ? <DayView date={anchor} staff={active} appts={appts} themeFor={themeFor} onOpen={setDetail} onSlot={(date, time, staffId) => setNewSlot({ date, time, staffId })} />
-        : <WeekView dates={week} appts={appts} staffFilter={staffFilter} startH={startH} endH={endH} themeFor={themeFor} workingHours={workingHours}
-            onOpen={setDetail} onSlot={(date, time) => setNewSlot({ date, time, staffId: staffFilter === "all" ? "" : String(staffFilter) })} />}
+      {view === "day" ? (
+        <DayView
+          date={anchor}
+          staff={active}
+          appts={appts}
+          themeFor={themeFor}
+          onOpen={setDetail}
+          onSlot={(date, time, staffId) => setNewSlot({ date, time, staffId })}
+        />
+      ) : (
+        <WeekView
+          dates={week}
+          appts={appts}
+          staffFilter={staffFilter}
+          startH={startH}
+          endH={endH}
+          themeFor={themeFor}
+          workingHours={workingHours}
+          onOpen={setDetail}
+          onSlot={(date, time) => setNewSlot({ date, time, staffId: staffFilter === "all" ? "" : String(staffFilter) })}
+        />
+      )}
 
       {/* ---------- Modals ---------- */}
-      {detail && <BookingDetailModal appt={detail} adminKey={adminKey} onClose={() => setDetail(null)}
-        onChanged={load} onGift={(a) => { setDetail(null); setGiftFor(a); }} />}
-      {giftFor && <GiftCardPayModal adminKey={adminKey} appointment={giftFor} onClose={() => setGiftFor(null)} onPaid={() => { setGiftFor(null); load(); }} />}
-      {newSlot && <NewBookingModal adminKey={adminKey} onClose={() => setNewSlot(null)} onCreated={() => { setNewSlot(null); load(); }}
-        defaultDate={newSlot.date} defaultTime={newSlot.time} defaultStaffId={newSlot.staffId} />}
+      {detail && (
+        <BookingDetailModal
+          appt={detail}
+          adminKey={adminKey}
+          onClose={() => setDetail(null)}
+          onChanged={load}
+          onGift={(a) => {
+            setDetail(null);
+            setGiftFor(a);
+          }}
+        />
+      )}
+      {giftFor && (
+        <GiftCardPayModal
+          adminKey={adminKey}
+          appointment={giftFor}
+          onClose={() => setGiftFor(null)}
+          onPaid={() => {
+            setGiftFor(null);
+            load();
+          }}
+        />
+      )}
+      {newSlot && (
+        <NewBookingModal
+          adminKey={adminKey}
+          onClose={() => setNewSlot(null)}
+          onCreated={() => {
+            setNewSlot(null);
+            load();
+          }}
+          defaultDate={newSlot.date}
+          defaultTime={newSlot.time}
+          defaultStaffId={newSlot.staffId}
+        />
+      )}
     </div>
   );
 }
 
 /* ============================ DAY VIEW ============================ */
-function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
-  date: string; staff: StaffFull[]; appts: Appointment[]; themeFor: (id?: number | null) => Theme;
-  onOpen: (a: Appointment) => void; onSlot: (date: string, time: string, staffId: string) => void;
+function DayView({
+  date,
+  staff,
+  appts,
+  themeFor,
+  onOpen,
+  onSlot,
+}: {
+  date: string;
+  staff: StaffFull[];
+  appts: Appointment[];
+  themeFor: (id?: number | null) => Theme;
+  onOpen: (a: Appointment) => void;
+  onSlot: (date: string, time: string, staffId: string) => void;
 }) {
   const dow = parseDay(date).getDay();
   const forStaff = (id: number) => appts.filter((a) => a.staffId === id && a.status !== "CANCELLED").sort((a, b) => a.time.localeCompare(b.time));
@@ -210,12 +336,21 @@ function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
   const Item = ({ a }: { a: Appointment }) => {
     const t = themeFor(a.staffId);
     return (
-      <button onClick={() => onOpen(a)} className={`flex w-full items-start gap-2 rounded-lg border-s-4 p-2 text-left text-sm shadow-sm transition hover:shadow ${t.bg} ${t.border} ${t.text}`}>
+      <button
+        onClick={() => onOpen(a)}
+        className={`flex w-full items-start gap-2 rounded-lg border-s-4 p-2 text-left text-sm shadow-sm transition hover:shadow ${t.bg} ${t.border} ${t.text}`}
+      >
         <div className="min-w-0">
-          <p className="font-semibold"><span className="font-extrabold">{a.time}</span> · {a.serviceName}</p>
-          <p className="truncate text-xs opacity-80">{a.customerName} · {a.customerPhone}</p>
+          <p className="font-semibold">
+            <span className="font-extrabold">{a.time}</span> · {a.serviceName}
+          </p>
+          <p className="truncate text-xs opacity-80">
+            {a.customerName} · {a.customerPhone}
+          </p>
         </div>
-        {a.status !== "CONFIRMED" && <span className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${st(a.status).chip}`}>{st(a.status).label}</span>}
+        {a.status !== "CONFIRMED" && (
+          <span className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${st(a.status).chip}`}>{st(a.status).label}</span>
+        )}
       </button>
     );
   };
@@ -230,14 +365,28 @@ function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
         return (
           <div key={s.id} className="card p-3">
             <div className="flex items-center justify-between">
-              <p className="flex items-center gap-2 font-display font-bold text-ink"><span className={`h-3 w-3 rounded-full ${themeFor(s.id).dot}`} />{s.name}</p>
-              <span className={`text-xs font-semibold ${off ? "text-red-500" : "text-emerald-600"}`}>{blocked ? "Blocked" : off ? "Day off" : `${day!.open}–${day!.close}`}</span>
+              <p className="font-display text-ink flex items-center gap-2 font-bold">
+                <span className={`h-3 w-3 rounded-full ${themeFor(s.id).dot}`} />
+                {s.name}
+              </p>
+              <span className={`text-xs font-semibold ${off ? "text-red-500" : "text-emerald-600"}`}>
+                {blocked ? "Blocked" : off ? "Day off" : `${day!.open}–${day!.close}`}
+              </span>
             </div>
             <div className="mt-2 max-h-[22rem] space-y-1.5 overflow-y-auto pe-0.5">
-              {list.length === 0
-                ? <p className="py-3 text-center text-xs text-muted">{off ? "Not working" : "No appointments"}</p>
-                : list.map((a) => <Item key={a.id} a={a} />)}
-              {!off && <button onClick={() => onSlot(date, "", String(s.id))} className="w-full rounded-lg border border-dashed border-border py-1.5 text-xs font-semibold text-muted transition hover:border-brand hover:text-brand">+ Add booking</button>}
+              {list.length === 0 ? (
+                <p className="text-muted py-3 text-center text-xs">{off ? "Not working" : "No appointments"}</p>
+              ) : (
+                list.map((a) => <Item key={a.id} a={a} />)
+              )}
+              {!off && (
+                <button
+                  onClick={() => onSlot(date, "", String(s.id))}
+                  className="border-border text-muted hover:border-brand hover:text-brand w-full rounded-lg border border-dashed py-1.5 text-xs font-semibold transition"
+                >
+                  + Add booking
+                </button>
+              )}
             </div>
           </div>
         );
@@ -245,9 +394,11 @@ function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
 
       {unassigned.length > 0 && (
         <div className="card border-dashed p-3">
-          <p className="font-display font-bold text-muted">Unassigned</p>
+          <p className="font-display text-muted font-bold">Unassigned</p>
           <div className="mt-2 max-h-[22rem] space-y-1.5 overflow-y-auto pe-0.5">
-            {unassigned.map((a) => <Item key={a.id} a={a} />)}
+            {unassigned.map((a) => (
+              <Item key={a.id} a={a} />
+            ))}
           </div>
         </div>
       )}
@@ -256,14 +407,31 @@ function DayView({ date, staff, appts, themeFor, onOpen, onSlot }: {
 }
 
 /* ============================ WEEK VIEW ============================ */
-function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHours, onOpen, onSlot }: {
-  dates: string[]; appts: Appointment[]; staffFilter: number | "all"; themeFor: (id?: number | null) => Theme;
-  startH: number; endH: number; workingHours: (iso: string) => { open: number; close: number } | null;
-  onOpen: (a: Appointment) => void; onSlot: (date: string, time: string) => void;
+function WeekView({
+  dates,
+  appts,
+  staffFilter,
+  startH,
+  endH,
+  themeFor,
+  workingHours,
+  onOpen,
+  onSlot,
+}: {
+  dates: string[];
+  appts: Appointment[];
+  staffFilter: number | "all";
+  themeFor: (id?: number | null) => Theme;
+  startH: number;
+  endH: number;
+  workingHours: (iso: string) => { open: number; close: number } | null;
+  onOpen: (a: Appointment) => void;
+  onSlot: (date: string, time: string) => void;
 }) {
   const hours = hoursBetween(startH, endH);
   const gridH = hours.length * HOUR_H;
-  const gridStart = startH * 60, gridEnd = endH * 60;
+  const gridStart = startH * 60,
+    gridEnd = endH * 60;
   const today = todayIso();
   const cols = `${GUTTER}px repeat(${dates.length}, minmax(160px, 1fr))`;
   const showAll = staffFilter === "all";
@@ -272,9 +440,10 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHo
   // Auto-scroll near the current time (or the salon open) when the week loads.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = scrollRef.current; if (!el) return;
+    const el = scrollRef.current;
+    if (!el) return;
     const focus = dates.includes(today) ? nowMinutes() : gridStart + 60;
-    el.scrollTop = Math.max(0, (focus - gridStart) / 60 * HOUR_H - el.clientHeight * 0.3);
+    el.scrollTop = Math.max(0, ((focus - gridStart) / 60) * HOUR_H - el.clientHeight * 0.3);
   }, [dates, startH]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -283,11 +452,19 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHo
       <div className="sticky top-0 z-30 grid border-b border-slate-200 bg-white/95 backdrop-blur" style={{ gridTemplateColumns: cols }}>
         <div className="border-e border-slate-200" />
         {dates.map((iso) => {
-          const d = parseDay(iso); const isToday = iso === today; const weekend = [0, 6].includes(d.getDay());
+          const d = parseDay(iso);
+          const isToday = iso === today;
+          const weekend = [0, 6].includes(d.getDay());
           return (
             <div key={iso} className={`border-s border-slate-200 px-1 py-2.5 text-center ${isToday ? "bg-brand-soft/50" : weekend ? "bg-slate-50" : ""}`}>
-              <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-brand-dark" : "text-muted"}`}>{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
-              <p className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base font-extrabold ${isToday ? "bg-brand text-white shadow" : "text-ink"}`}>{d.getDate()}</p>
+              <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-brand-dark" : "text-muted"}`}>
+                {d.toLocaleDateString("en-US", { weekday: "short" })}
+              </p>
+              <p
+                className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base font-extrabold ${isToday ? "bg-brand text-white shadow" : "text-ink"}`}
+              >
+                {d.getDate()}
+              </p>
             </div>
           );
         })}
@@ -297,32 +474,53 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHo
       <div className="grid" style={{ gridTemplateColumns: cols }}>
         {/* Time gutter */}
         <div className="relative border-e border-slate-200 bg-slate-50/40" style={{ height: gridH }}>
-          {hours.map((h, i) => <div key={h} className="absolute inset-x-0 -translate-y-1/2 pe-2 text-end text-[13px] font-bold text-ink/70" style={{ top: i * HOUR_H }}>{fmtHour(h)}</div>)}
+          {hours.map((h, i) => (
+            <div key={h} className="text-ink/70 absolute inset-x-0 -translate-y-1/2 pe-2 text-end text-[13px] font-bold" style={{ top: i * HOUR_H }}>
+              {fmtHour(h)}
+            </div>
+          ))}
         </div>
 
         {/* Day columns */}
         {dates.map((iso) => {
-          const d = parseDay(iso); const isToday = iso === today; const weekend = [0, 6].includes(d.getDay());
+          const d = parseDay(iso);
+          const isToday = iso === today;
+          const weekend = [0, 6].includes(d.getDay());
           const { placed, laneCount } = layout(byDay(iso));
-          const nowTop = isToday ? (nowMinutes() - gridStart) / 60 * HOUR_H : -1;
+          const nowTop = isToday ? ((nowMinutes() - gridStart) / 60) * HOUR_H : -1;
           const wh = workingHours(iso);
-          const closed: [number, number][] = !wh ? [[gridStart, gridEnd]] : [
-            ...(wh.open > gridStart ? [[gridStart, wh.open] as [number, number]] : []),
-            ...(wh.close < gridEnd ? [[wh.close, gridEnd] as [number, number]] : []),
-          ];
+          const closed: [number, number][] = !wh
+            ? [[gridStart, gridEnd]]
+            : [
+                ...(wh.open > gridStart ? [[gridStart, wh.open] as [number, number]] : []),
+                ...(wh.close < gridEnd ? [[wh.close, gridEnd] as [number, number]] : []),
+              ];
           return (
-            <div key={iso} className={`relative border-s border-slate-200 ${isToday ? "bg-brand-soft/10" : weekend ? "bg-slate-50/50" : ""}`} style={{ height: gridH }}>
+            <div
+              key={iso}
+              className={`relative border-s border-slate-200 ${isToday ? "bg-brand-soft/10" : weekend ? "bg-slate-50/50" : ""}`}
+              style={{ height: gridH }}
+            >
               {/* Hour rows (zebra) + clickable empty slots + half-hour guide */}
               {hours.map((h, i) => (
-                <button key={h} onClick={() => onSlot(iso, `${pad(h)}:00`)} title="Add booking"
-                  className={`absolute inset-x-0 border-t border-slate-200 transition hover:bg-brand-soft/40 ${i % 2 ? "bg-slate-50/50" : ""}`} style={{ top: i * HOUR_H, height: HOUR_H }}>
+                <button
+                  key={h}
+                  onClick={() => onSlot(iso, `${pad(h)}:00`)}
+                  title="Add booking"
+                  className={`hover:bg-brand-soft/40 absolute inset-x-0 border-t border-slate-200 transition ${i % 2 ? "bg-slate-50/50" : ""}`}
+                  style={{ top: i * HOUR_H, height: HOUR_H }}
+                >
                   <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-200/70" />
                 </button>
               ))}
 
               {/* Grey out closed hours */}
               {closed.map(([a0, b0], k) => (
-                <div key={k} className="pointer-events-none absolute inset-x-0 z-[1] bg-slate-100/70" style={{ top: (a0 - gridStart) / 60 * HOUR_H, height: (b0 - a0) / 60 * HOUR_H }} />
+                <div
+                  key={k}
+                  className="pointer-events-none absolute inset-x-0 z-[1] bg-slate-100/70"
+                  style={{ top: ((a0 - gridStart) / 60) * HOUR_H, height: ((b0 - a0) / 60) * HOUR_H }}
+                />
               ))}
 
               {/* Live "now" line */}
@@ -334,26 +532,41 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHo
 
               {/* Appointment cards — white card, staff-coloured accent */}
               {placed.map(({ a, s, e, lane }) => {
-                const top = (s - gridStart) / 60 * HOUR_H;
-                const h = Math.max((e - s) / 60 * HOUR_H, 34);
+                const top = ((s - gridStart) / 60) * HOUR_H;
+                const h = Math.max(((e - s) / 60) * HOUR_H, 34);
                 const w = 100 / laneCount;
                 const t = themeFor(a.staffId);
                 const mark = STATUS_MARK[a.status];
                 const cancelled = a.status === "CANCELLED";
                 return (
-                  <button key={a.id} onClick={() => onOpen(a)} title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}${a.staffName ? ` · ${a.staffName}` : ""}`}
+                  <button
+                    key={a.id}
+                    onClick={() => onOpen(a)}
+                    title={`${a.time}–${fmtClock(e)} · ${a.serviceName} · ${a.customerName}${a.staffName ? ` · ${a.staffName}` : ""}`}
                     style={{ top, height: h - 4, left: `calc(${lane * w}% + 3px)`, width: `calc(${w}% - 6px)` }}
-                    className={`rg-appt group absolute z-20 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 pe-2 ps-3 text-left leading-tight shadow-sm transition-all duration-200 hover:z-30 hover:-translate-y-0.5 hover:shadow-lg ${cancelled ? "opacity-60" : ""}`}>
+                    className={`rg-appt group absolute z-20 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 pe-2 ps-3 text-left leading-tight shadow-sm transition-all duration-200 hover:z-30 hover:-translate-y-0.5 hover:shadow-lg ${cancelled ? "opacity-60" : ""}`}
+                  >
                     <span className={`absolute inset-y-0 start-0 w-1.5 ${t.dot}`} />
                     <span className="flex items-center gap-1">
                       <span className="shrink-0 text-xs">{serviceIcon(a.serviceName)}</span>
                       <span className={`truncate text-[13px] font-extrabold ${t.text} ${cancelled ? "line-through" : ""}`}>{a.serviceName}</span>
                       {mark && <span className="ms-auto shrink-0 text-xs">{mark}</span>}
                     </span>
-                    <span className="truncate text-[11px] font-semibold text-ink/70">{a.time}–{fmtClock(e)}</span>
-                    {showAll && a.staffName && h > 62 && <span className="flex items-center gap-1 truncate text-[11px] font-bold text-ink/80"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${t.dot}`} />{a.staffName}</span>}
-                    {h > 86 && <span className="truncate text-[11px] text-muted">👤 {a.customerName}</span>}
-                    {h > 110 && a.price > 0 && <span className="truncate text-[11px] text-muted">💵 ${a.price} · {a.paymentMethod === "WHISH" ? "Whish" : "Cash"}</span>}
+                    <span className="text-ink/70 truncate text-[11px] font-semibold">
+                      {a.time}–{fmtClock(e)}
+                    </span>
+                    {showAll && a.staffName && h > 62 && (
+                      <span className="text-ink/80 flex items-center gap-1 truncate text-[11px] font-bold">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${t.dot}`} />
+                        {a.staffName}
+                      </span>
+                    )}
+                    {h > 86 && <span className="text-muted truncate text-[11px]">👤 {a.customerName}</span>}
+                    {h > 110 && a.price > 0 && (
+                      <span className="text-muted truncate text-[11px]">
+                        💵 ${a.price} · {a.paymentMethod === "WHISH" ? "Whish" : "Cash"}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -366,8 +579,18 @@ function WeekView({ dates, appts, staffFilter, startH, endH, themeFor, workingHo
 }
 
 /* ======================= BOOKING DETAIL MODAL ======================= */
-function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
-  appt: Appointment; adminKey: string; onClose: () => void; onChanged: () => void; onGift: (a: Appointment) => void;
+function BookingDetailModal({
+  appt: a,
+  adminKey,
+  onClose,
+  onChanged,
+  onGift,
+}: {
+  appt: Appointment;
+  adminKey: string;
+  onClose: () => void;
+  onChanged: () => void;
+  onGift: (a: Appointment) => void;
 }) {
   const H = { "x-admin-key": adminKey };
   const [busy, setBusy] = useState(false);
@@ -379,44 +602,88 @@ function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
     const n = Number(draft);
     const val = Math.max(0, round2(Number.isFinite(n) ? n : a.price));
     setBusy(true);
-    try { await api.patch(`/api/admin/appointments/${a.id}`, { price: val }, H); setPrice(val); setEditingPrice(false); onChanged(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Couldn't update the price."); } finally { setBusy(false); }
+    try {
+      await api.patch(`/api/admin/appointments/${a.id}`, { price: val }, H);
+      setPrice(val);
+      setEditingPrice(false);
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't update the price.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function setStatus(status: string) {
     setBusy(true);
-    try { await api.patch(`/api/admin/appointments/${a.id}`, { status }, H); onChanged(); onClose(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Couldn't update."); } finally { setBusy(false); }
+    try {
+      await api.patch(`/api/admin/appointments/${a.id}`, { status }, H);
+      onChanged();
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't update.");
+    } finally {
+      setBusy(false);
+    }
   }
   async function markPaid() {
     if (!a.paymentId) return;
     setBusy(true);
-    try { await api.post(`/api/admin/payments/${a.paymentId}/mark-paid`, {}, H); onChanged(); onClose(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Couldn't mark paid."); } finally { setBusy(false); }
+    try {
+      await api.post(`/api/admin/payments/${a.paymentId}/mark-paid`, {}, H);
+      onChanged();
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't mark paid.");
+    } finally {
+      setBusy(false);
+    }
   }
   async function remove() {
     if (!confirm(`Delete this booking (${a.serviceName} for ${a.customerName})? This permanently removes it and can't be undone.`)) return;
     setBusy(true);
-    try { await api.delete(`/api/admin/appointments/${a.id}`, H); onChanged(); onClose(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Couldn't delete."); } finally { setBusy(false); }
+    try {
+      await api.delete(`/api/admin/appointments/${a.id}`, H);
+      onChanged();
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't delete.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const done = a.status === "COMPLETED", cancelled = a.status === "CANCELLED";
-  const waText = (a.status === "COMPLETED" ? waMessages.thanks : waMessages.confirmation)({ customerName: a.customerName, serviceName: a.serviceName, date: a.date, time: a.time });
-  const Row = ({ k, v }: { k: string; v: string }) => v ? <div className="flex justify-between gap-4 text-sm"><span className="text-muted">{k}</span><span className="text-end font-medium text-ink">{v}</span></div> : null;
+  const done = a.status === "COMPLETED",
+    cancelled = a.status === "CANCELLED";
+  const waText = (a.status === "COMPLETED" ? waMessages.thanks : waMessages.confirmation)({
+    customerName: a.customerName,
+    serviceName: a.serviceName,
+    date: a.date,
+    time: a.time,
+  });
+  const Row = ({ k, v }: { k: string; v: string }) =>
+    v ? (
+      <div className="flex justify-between gap-4 text-sm">
+        <span className="text-muted">{k}</span>
+        <span className="text-ink text-end font-medium">{v}</span>
+      </div>
+    ) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-[1.5rem] bg-surface p-5 shadow-2xl sm:rounded-[1.5rem]" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-surface w-full max-w-md rounded-t-[1.5rem] p-5 shadow-2xl sm:rounded-[1.5rem]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="font-display text-lg font-bold text-ink">{a.serviceName}</p>
-            <p className="text-sm text-muted">{parseDay(a.date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} · {a.time}{a.durationMin ? ` · ${a.durationMin}m` : ""}</p>
+            <p className="font-display text-ink text-lg font-bold">{a.serviceName}</p>
+            <p className="text-muted text-sm">
+              {parseDay(a.date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} · {a.time}
+              {a.durationMin ? ` · ${a.durationMin}m` : ""}
+            </p>
           </div>
           <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${st(a.status).chip}`}>{st(a.status).label}</span>
         </div>
 
-        <div className="mt-4 space-y-1.5 rounded-xl bg-surface-2/60 p-3">
+        <div className="bg-surface-2/60 mt-4 space-y-1.5 rounded-xl p-3">
           <Row k="Customer" v={a.customerName} />
           <Row k="Phone" v={a.customerPhone} />
           <Row k="Specialist" v={a.staffName || "Unassigned"} />
@@ -425,50 +692,148 @@ function BookingDetailModal({ appt: a, adminKey, onClose, onChanged, onGift }: {
         </div>
 
         {/* Price / discount — set a lower final price for a discount or "paid less" */}
-        <div className="mt-3 rounded-xl border border-border p-3">
+        <div className="border-border mt-3 rounded-xl border p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-muted">Price</span>
+            <span className="text-muted text-sm">Price</span>
             <div className="flex items-center gap-2">
-              <span className="text-base font-bold text-ink">${price}
-                {price !== a.price && <span className="ms-1.5 text-xs font-normal text-muted line-through">${a.price}</span>}
+              <span className="text-ink text-base font-bold">
+                ${price}
+                {price !== a.price && <span className="text-muted ms-1.5 text-xs font-normal line-through">${a.price}</span>}
               </span>
-              {!editingPrice && <button onClick={() => { setDraft(String(price)); setEditingPrice(true); }} className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-bold text-brand-dark transition hover:bg-brand-soft/70">Discount / edit</button>}
+              {!editingPrice && (
+                <button
+                  onClick={() => {
+                    setDraft(String(price));
+                    setEditingPrice(true);
+                  }}
+                  className="bg-brand-soft text-brand-dark hover:bg-brand-soft/70 rounded-full px-2.5 py-1 text-xs font-bold transition"
+                >
+                  Discount / edit
+                </button>
+              )}
             </div>
           </div>
           {editingPrice && (
-            <div className="mt-3 space-y-2 border-t border-border pt-3">
+            <div className="border-border mt-3 space-y-2 border-t pt-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-muted">$</span>
-                <input type="number" min={0} step="0.5" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus className="input !w-28 !py-1.5 text-sm" />
+                <span className="text-muted text-sm font-semibold">$</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  autoFocus
+                  className="input !w-28 !py-1.5 text-sm"
+                />
                 <div className="flex flex-wrap gap-1">
-                  {[10, 20, 50].map((p) => <button key={p} onClick={() => setDraft(String(round2(a.price * (1 - p / 100))))} className="rounded-full bg-surface-2 px-2 py-1 text-xs font-semibold text-ink transition hover:bg-brand-soft">-{p}%</button>)}
-                  <button onClick={() => setDraft(String(a.price))} className="rounded-full bg-surface-2 px-2 py-1 text-xs font-semibold text-muted transition hover:text-ink">Reset</button>
+                  {[10, 20, 50].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setDraft(String(round2(a.price * (1 - p / 100))))}
+                      className="bg-surface-2 text-ink hover:bg-brand-soft rounded-full px-2 py-1 text-xs font-semibold transition"
+                    >
+                      -{p}%
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setDraft(String(a.price))}
+                    className="bg-surface-2 text-muted hover:text-ink rounded-full px-2 py-1 text-xs font-semibold transition"
+                  >
+                    Reset
+                  </button>
                 </div>
               </div>
               {Number(draft) !== a.price && Number.isFinite(Number(draft)) && (
-                <p className="text-xs text-muted">Discount: <span className="font-semibold text-ink">${round2(a.price - Number(draft))}</span> · commission recalculated automatically.</p>
+                <p className="text-muted text-xs">
+                  Discount: <span className="text-ink font-semibold">${round2(a.price - Number(draft))}</span> · commission recalculated automatically.
+                </p>
               )}
               <div className="flex gap-2">
-                <button onClick={savePrice} disabled={busy} className="btn btn-primary px-3 py-1.5 text-xs">{busy ? "Saving…" : "Save price"}</button>
-                <button onClick={() => setEditingPrice(false)} className="btn btn-ghost px-3 py-1.5 text-xs">Cancel</button>
+                <button onClick={savePrice} disabled={busy} className="btn btn-primary px-3 py-1.5 text-xs">
+                  {busy ? "Saving…" : "Save price"}
+                </button>
+                <button onClick={() => setEditingPrice(false)} className="btn btn-ghost px-3 py-1.5 text-xs">
+                  Cancel
+                </button>
               </div>
             </div>
           )}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <a href={waLink(a.customerPhone, waText)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366]/12 px-3 py-1.5 text-xs font-bold text-[#128C4A] transition hover:bg-[#25D366]/20">💬 WhatsApp</a>
-          {a.paymentId && a.paymentStatus !== "PAID" && <button onClick={markPaid} disabled={busy} className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-600 transition hover:bg-emerald-500/25">💵 Mark paid</button>}
-          <button onClick={() => onGift(a)} className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand-dark transition hover:bg-brand-soft/70">🎀 Gift card</button>
+          <a
+            href={waLink(a.customerPhone, waText)}
+            target="_blank"
+            rel="noreferrer"
+            className="bg-[#25D366]/12 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[#128C4A] transition hover:bg-[#25D366]/20"
+          >
+            💬 WhatsApp
+          </a>
+          {a.paymentId && a.paymentStatus !== "PAID" && (
+            <button
+              onClick={markPaid}
+              disabled={busy}
+              className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-600 transition hover:bg-emerald-500/25"
+            >
+              💵 Mark paid
+            </button>
+          )}
+          <button
+            onClick={() => onGift(a)}
+            className="bg-brand-soft text-brand-dark hover:bg-brand-soft/70 rounded-full px-3 py-1.5 text-xs font-bold transition"
+          >
+            🎀 Gift card
+          </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-          {!done && !cancelled && <button onClick={() => setStatus("COMPLETED")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/15">Mark done</button>}
-          {!done && !cancelled && <button onClick={() => setStatus("NO_SHOW")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-amber-600 transition hover:bg-amber-400/15">No-show</button>}
-          {!cancelled && <button onClick={() => setStatus("CANCELLED")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/15">Cancel</button>}
-          {(cancelled || a.status === "NO_SHOW") && <button onClick={() => setStatus("CONFIRMED")} disabled={busy} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs font-semibold text-brand-dark transition hover:bg-brand-soft">Restore</button>}
-          <button onClick={remove} disabled={busy} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10">🗑 Delete</button>
-          <button onClick={onClose} className="ms-auto rounded-full px-3 py-1.5 text-xs font-semibold text-muted hover:text-ink">Close</button>
+        <div className="border-border mt-3 flex flex-wrap gap-2 border-t pt-3">
+          {!done && !cancelled && (
+            <button
+              onClick={() => setStatus("COMPLETED")}
+              disabled={busy}
+              className="bg-surface-2 rounded-full px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/15"
+            >
+              Mark done
+            </button>
+          )}
+          {!done && !cancelled && (
+            <button
+              onClick={() => setStatus("NO_SHOW")}
+              disabled={busy}
+              className="bg-surface-2 rounded-full px-3 py-1.5 text-xs font-semibold text-amber-600 transition hover:bg-amber-400/15"
+            >
+              No-show
+            </button>
+          )}
+          {!cancelled && (
+            <button
+              onClick={() => setStatus("CANCELLED")}
+              disabled={busy}
+              className="bg-surface-2 rounded-full px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/15"
+            >
+              Cancel
+            </button>
+          )}
+          {(cancelled || a.status === "NO_SHOW") && (
+            <button
+              onClick={() => setStatus("CONFIRMED")}
+              disabled={busy}
+              className="bg-surface-2 text-brand-dark hover:bg-brand-soft rounded-full px-3 py-1.5 text-xs font-semibold transition"
+            >
+              Restore
+            </button>
+          )}
+          <button
+            onClick={remove}
+            disabled={busy}
+            className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10"
+          >
+            🗑 Delete
+          </button>
+          <button onClick={onClose} className="text-muted hover:text-ink ms-auto rounded-full px-3 py-1.5 text-xs font-semibold">
+            Close
+          </button>
         </div>
       </div>
     </div>

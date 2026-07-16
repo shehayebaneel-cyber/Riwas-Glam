@@ -17,19 +17,32 @@ export const ymd = (d: Date) => d.toLocaleDateString("en-CA");
 /** N consecutive days starting with Beirut's today, as local-midnight Dates. */
 export const nextDays = (n: number) => {
   const base = parseDay(todayIso());
-  return Array.from({ length: n }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d; });
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    return d;
+  });
 };
 
 /** Add n days to a "YYYY-MM-DD" and return "YYYY-MM-DD" (built from a Beirut
  *  calendar date via parseDay, so it renders correctly in any browser). */
-export const addDaysIso = (s: string, n: number) => { const d = parseDay(s); d.setDate(d.getDate() + n); return ymd(d); };
+export const addDaysIso = (s: string, n: number) => {
+  const d = parseDay(s);
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+};
 
 /** The 7 iso dates (Monday→Sunday) of the week that contains `s`. */
 export const weekOf = (s: string) => {
   const d = parseDay(s);
   const mondayOffset = (d.getDay() + 6) % 7; // getDay: 0=Sun → treat Monday as start
-  const mon = new Date(d); mon.setDate(d.getDate() - mondayOffset);
-  return Array.from({ length: 7 }, (_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return ymd(x); });
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - mondayOffset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(mon);
+    x.setDate(mon.getDate() + i);
+    return ymd(x);
+  });
 };
 
 /** Minutes since midnight, right now, in Beirut. */

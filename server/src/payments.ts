@@ -9,8 +9,7 @@ import crypto from "node:crypto";
 
 export type PaymentMethod = "CASH" | "WHISH";
 export const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "WHISH"];
-export const isPaymentMethod = (m: string): m is PaymentMethod =>
-  (PAYMENT_METHODS as string[]).includes(m);
+export const isPaymentMethod = (m: string): m is PaymentMethod => (PAYMENT_METHODS as string[]).includes(m);
 
 // Short, human-friendly, unambiguous reference (no O/0/I/1 confusion).
 const REF_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -27,8 +26,7 @@ export function genReference(): string {
 //   WHISH_BASE_URL         base URL of the Whish API
 //   WHISH_CHANNEL / _SECRET / _WEBHOOK_SECRET   auth + webhook verification
 // ---------------------------------------------------------------------------
-export const whishConfigured = () =>
-  !!(process.env.WHISH_BASE_URL && process.env.WHISH_SECRET);
+export const whishConfigured = () => !!(process.env.WHISH_BASE_URL && process.env.WHISH_SECRET);
 
 export type WhishInitInput = {
   reference: string;

@@ -10,7 +10,11 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     let message = "Something went wrong. Please try again.";
-    try { message = (await res.json()).error ?? message; } catch { /* ignore */ }
+    try {
+      message = (await res.json()).error ?? message;
+    } catch {
+      /* ignore */
+    }
     throw new Error(message);
   }
   if (res.status === 204) return undefined as T;

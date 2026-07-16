@@ -33,7 +33,12 @@ async function shrinkToDataUrl(file: File): Promise<string> {
   return canvas.toDataURL(keepAlpha ? "image/png" : "image/jpeg", 0.82);
 }
 
-export function ImageUpload({ value, onChange, adminKey, className = "" }: {
+export function ImageUpload({
+  value,
+  onChange,
+  adminKey,
+  className = "",
+}: {
   value: string;
   onChange: (url: string) => void;
   adminKey: string;
@@ -45,7 +50,8 @@ export function ImageUpload({ value, onChange, adminKey, className = "" }: {
 
   async function pick(file: File | undefined) {
     if (!file) return;
-    setBusy(true); setErr("");
+    setBusy(true);
+    setErr("");
     try {
       const dataUrl = await shrinkToDataUrl(file);
       const r = await api.post<{ url: string }>("/api/admin/images", { dataUrl }, { "x-admin-key": adminKey });
@@ -60,14 +66,24 @@ export function ImageUpload({ value, onChange, adminKey, className = "" }: {
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-surface-2">
-        {value ? <img src={value} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xl text-muted">🖼️</div>}
+      <div className="border-border bg-surface-2 h-16 w-16 shrink-0 overflow-hidden rounded-xl border">
+        {value ? (
+          <img src={value} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="text-muted flex h-full w-full items-center justify-center text-xl">🖼️</div>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="btn btn-ghost px-3 py-1.5 text-xs disabled:opacity-60">{busy ? "Uploading…" : "📤 Upload photo"}</button>
-          {value && <button type="button" onClick={() => onChange("")} className="btn btn-ghost px-3 py-1.5 text-xs text-red-500">Remove</button>}
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="btn btn-ghost px-3 py-1.5 text-xs disabled:opacity-60">
+            {busy ? "Uploading…" : "📤 Upload photo"}
+          </button>
+          {value && (
+            <button type="button" onClick={() => onChange("")} className="btn btn-ghost px-3 py-1.5 text-xs text-red-500">
+              Remove
+            </button>
+          )}
         </div>
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="…or paste an image link" className="input mt-2 !py-1.5 text-xs" />
         {err && <p className="mt-1 text-xs font-medium text-red-600">{err}</p>}

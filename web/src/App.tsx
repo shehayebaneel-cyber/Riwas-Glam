@@ -26,7 +26,12 @@ function Tracker() {
   useEffect(() => {
     if (pathname.startsWith("/admin") || pathname.startsWith("/staff")) return;
     let src = "";
-    try { const r = document.referrer; if (r && !r.includes(window.location.host)) src = new URL(r).hostname; } catch { /* ignore */ }
+    try {
+      const r = document.referrer;
+      if (r && !r.includes(window.location.host)) src = new URL(r).hostname;
+    } catch {
+      /* ignore */
+    }
     track("PAGE_VIEW", pathname, src);
   }, [pathname]);
   return null;
@@ -37,14 +42,20 @@ function Tracker() {
 function ScrollManager() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (!hash) { window.scrollTo({ top: 0 }); return; }
+    if (!hash) {
+      window.scrollTo({ top: 0 });
+      return;
+    }
     const id = decodeURIComponent(hash.slice(1));
     let cancelled = false;
     // Coming from another page, the home content (images, API-loaded services/gallery)
     // renders AFTER we navigate, pushing the target down. So keep snapping to it until
     // its position has been stable for a few checks, or we hit the time cap.
-    let lastTop = Number.NaN, stable = 0, elapsed = 0;
-    const STEP = 100, MAX = 5000;
+    let lastTop = Number.NaN,
+      stable = 0,
+      elapsed = 0;
+    const STEP = 100,
+      MAX = 5000;
     const loop = () => {
       if (cancelled) return;
       const el = document.getElementById(id);
@@ -59,7 +70,9 @@ function ScrollManager() {
       if (elapsed < MAX) window.setTimeout(loop, STEP);
     };
     loop();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pathname, hash]);
   return null;
 }
@@ -78,19 +91,32 @@ export default function App() {
   const [, bump] = useState(0);
   const [status, setStatus] = useState<{ closed: boolean; message: string } | null>(null);
   useEffect(() => {
-    api.get<Partial<typeof SITE>>("/api/site-content")
-      .then((c) => { Object.assign(SITE, c); })
+    api
+      .get<Partial<typeof SITE>>("/api/site-content")
+      .then((c) => {
+        Object.assign(SITE, c);
+      })
       .catch(() => {})
-      .finally(() => { runtime.contentLoaded = true; bump((v) => v + 1); });
-    api.get<{ closed: boolean; message: string }>("/api/status").then(setStatus).catch(() => {});
+      .finally(() => {
+        runtime.contentLoaded = true;
+        bump((v) => v + 1);
+      });
+    api
+      .get<{ closed: boolean; message: string }>("/api/status")
+      .then(setStatus)
+      .catch(() => {});
   }, []);
 
   return (
     <>
       <Tracker />
       <ScrollManager />
-      {status?.closed &&<div className="bg-brand-dark px-4 py-2 text-center text-sm font-semibold text-white">{status.message || "We're temporarily closed for online bookings — please contact us. 💗"}</div>}
-      <Suspense fallback={<div className="p-16 text-center text-muted">Loading…</div>}>
+      {status?.closed && (
+        <div className="bg-brand-dark px-4 py-2 text-center text-sm font-semibold text-white">
+          {status.message || "We're temporarily closed for online bookings — please contact us. 💗"}
+        </div>
+      )}
+      <Suspense fallback={<div className="text-muted p-16 text-center">Loading…</div>}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/services" element={<Services />} />

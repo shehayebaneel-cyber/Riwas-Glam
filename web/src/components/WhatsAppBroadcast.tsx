@@ -20,11 +20,17 @@ export function WhatsAppBroadcast({ adminKey }: { adminKey: string }) {
   const [audience, setAudience] = useState<Audience>("all");
   const [sent, setSent] = useState<Record<number, boolean>>({});
 
-  useEffect(() => { api.get<Cust[]>("/api/admin/customers", { "x-admin-key": adminKey }).then(setCustomers).catch(() => {}); }, [adminKey]);
+  useEffect(() => {
+    api
+      .get<Cust[]>("/api/admin/customers", { "x-admin-key": adminKey })
+      .then(setCustomers)
+      .catch(() => {});
+  }, [adminKey]);
 
   const list = useMemo(() => {
     const month = new Date().getMonth() + 1;
-    const cut = new Date(); cut.setDate(cut.getDate() - 60);
+    const cut = new Date();
+    cut.setDate(cut.getDate() - 60);
     const cutStr = cut.toISOString().slice(0, 10);
     return customers.filter((c) => {
       if (!c.phone) return false;
@@ -43,50 +49,70 @@ export function WhatsAppBroadcast({ adminKey }: { adminKey: string }) {
       <div className="flex items-center gap-2">
         <span className="text-xl">📣</span>
         <div>
-          <p className="font-display font-bold text-brand-dark">Send an offer on WhatsApp</p>
-          <p className="text-xs text-muted">Free — pick who gets it, then tap each “Send”. WhatsApp opens with the message ready.</p>
+          <p className="font-display text-brand-dark font-bold">Send an offer on WhatsApp</p>
+          <p className="text-muted text-xs">Free — pick who gets it, then tap each “Send”. WhatsApp opens with the message ready.</p>
         </div>
       </div>
 
       {/* Audience */}
       <div className="mt-4 flex flex-wrap gap-2">
         {AUDIENCES.map((a) => (
-          <button key={a.key} onClick={() => setAudience(a.key)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${audience === a.key ? "bg-brand text-white" : "bg-surface-2 text-muted hover:text-brand"}`}>
+          <button
+            key={a.key}
+            onClick={() => setAudience(a.key)}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${audience === a.key ? "bg-brand text-white" : "bg-surface-2 text-muted hover:text-brand"}`}
+          >
             {a.label}
           </button>
         ))}
       </div>
 
       {/* Message */}
-      <label className="mt-4 block text-xs font-semibold text-muted">Your message <span className="font-normal">(use <code className="rounded bg-surface-2 px-1">{"{name}"}</code> to greet each customer)</span></label>
+      <label className="text-muted mt-4 block text-xs font-semibold">
+        Your message{" "}
+        <span className="font-normal">
+          (use <code className="bg-surface-2 rounded px-1">{"{name}"}</code> to greet each customer)
+        </span>
+      </label>
       <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={3} className="input mt-1 w-full text-sm" />
-      <div className="mt-2 rounded-xl bg-surface-2 p-3 text-sm text-ink">
-        <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted/70">Preview</p>
+      <div className="bg-surface-2 text-ink mt-2 rounded-xl p-3 text-sm">
+        <p className="text-muted/70 mb-1 text-[11px] font-bold uppercase tracking-wider">Preview</p>
         {preview}
       </div>
 
       {/* Recipients */}
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-ink">{list.length} recipient{list.length === 1 ? "" : "s"}</p>
+        <p className="text-ink text-sm font-semibold">
+          {list.length} recipient{list.length === 1 ? "" : "s"}
+        </p>
         {sentCount > 0 && <p className="text-xs text-emerald-600">{sentCount} sent</p>}
       </div>
       <div className="no-scrollbar mt-2 max-h-80 space-y-1.5 overflow-y-auto">
-        {list.length === 0 ? <p className="py-6 text-center text-sm text-muted">No customers match this filter yet.</p> : list.map((c) => (
-          <div key={c.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink">{c.name || "Customer"}</p>
-              <p className="truncate text-xs text-muted">{c.phone}</p>
+        {list.length === 0 ? (
+          <p className="text-muted py-6 text-center text-sm">No customers match this filter yet.</p>
+        ) : (
+          list.map((c) => (
+            <div key={c.id} className="border-border bg-surface flex items-center gap-3 rounded-xl border p-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-ink truncate text-sm font-semibold">{c.name || "Customer"}</p>
+                <p className="text-muted truncate text-xs">{c.phone}</p>
+              </div>
+              <a
+                href={waLink(c.phone, msg.replace(/\{name\}/g, c.name || "there"))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setSent((s) => ({ ...s, [c.id]: true }))}
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${sent[c.id] ? "bg-emerald-500/15 text-emerald-600" : "bg-[#25D366] text-white hover:brightness-95"}`}
+              >
+                {sent[c.id] ? "✓ Sent" : "Send"}
+              </a>
             </div>
-            <a href={waLink(c.phone, msg.replace(/\{name\}/g, c.name || "there"))} target="_blank" rel="noreferrer"
-              onClick={() => setSent((s) => ({ ...s, [c.id]: true }))}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${sent[c.id] ? "bg-emerald-500/15 text-emerald-600" : "bg-[#25D366] text-white hover:brightness-95"}`}>
-              {sent[c.id] ? "✓ Sent" : "Send"}
-            </a>
-          </div>
-        ))}
+          ))
+        )}
       </div>
-      <p className="mt-3 text-[11px] text-muted">Tip: WhatsApp opens one chat at a time — tap “Send” down the list. Only message customers who expect to hear from you.</p>
+      <p className="text-muted mt-3 text-[11px]">
+        Tip: WhatsApp opens one chat at a time — tap “Send” down the list. Only message customers who expect to hear from you.
+      </p>
     </div>
   );
 }
