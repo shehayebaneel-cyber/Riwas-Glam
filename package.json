@@ -1,0 +1,13 @@
+{
+  "name": "riwaglam",
+  "private": true,
+  "scripts": {
+    "format": "prettier --write \"web/src/**/*.{ts,tsx,css}\" \"server/src/**/*.ts\" \"server/prisma/seed.ts\"",
+    "format:check": "prettier --check \"web/src/**/*.{ts,tsx,css}\" \"server/src/**/*.ts\"",
+    "lint": "cd web && npx oxlint src"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.11"
+  }
+}
