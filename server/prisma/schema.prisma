@@ -415,14 +415,31 @@ model Review {
 // A running-cost the salon pays (rent, electricity, supplies, salaries…). Used to
 // turn gross profit into net profit on the finance dashboard.
 model Expense {
-  id        Int      @id @default(autoincrement())
-  category  String   @default("Other") // Rent | Utilities | Supplies | Marketing | Salaries | Equipment | Other
-  label     String   @default("")
-  amount    Float    @default(0)
-  date      String   // YYYY-MM-DD
-  note      String   @default("")
-  createdAt DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  category    String   @default("Other") // Rent | Utilities | Supplies | Marketing | Salaries | Equipment | Other
+  label       String   @default("")
+  amount      Float    @default(0)
+  date        String   // YYYY-MM-DD
+  note        String   @default("")
+  recurringId Int? // set when auto-generated from a RecurringExpense
+  period      String   @default("") // occurrence key (YYYY-MM) to prevent duplicate generation
+  createdAt   DateTime @default(now())
   @@index([date])
+  @@index([recurringId, period])
+}
+
+// A repeating expense the owner sets up once (rent, wifi, electricity). The system
+// auto-creates a real Expense for each period as it comes due.
+model RecurringExpense {
+  id         Int      @id @default(autoincrement())
+  category   String   @default("Other")
+  label      String   @default("")
+  amount     Float    @default(0)
+  frequency  String   @default("MONTHLY") // MONTHLY | QUARTERLY | YEARLY
+  dayOfMonth Int      @default(1) // which day of the month to post it
+  startDate  String // YYYY-MM-DD — first month it applies
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
 }
 
 // A customer waiting for a spot when their preferred time is full.

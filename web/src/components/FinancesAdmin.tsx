@@ -17,7 +17,14 @@ type Analytics = {
   byService: { name: string; count: number; revenue: number; profit: number }[];
   daily: { date: string; value: number }[];
 };
-type Expense = { id: number; category: string; label: string; amount: number; date: string; note: string };
+type Expense = { id: number; category: string; label: string; amount: number; date: string; note: string; recurringId?: number | null };
+type Recurring = { id: number; category: string; label: string; amount: number; frequency: string; dayOfMonth: number; startDate: string; active: boolean };
+const FREQ: [string, string][] = [
+  ["MONTHLY", "Every month"],
+  ["QUARTERLY", "Every 3 months"],
+  ["YEARLY", "Every year"],
+];
+const freqLabel = (f: string) => FREQ.find(([v]) => v === f)?.[1] ?? f;
 type Cat = { id: number; name: string; emoji: string; services: { id: number; name: string; price: number; materialCost: number }[] };
 
 const ymd = (d: Date) => d.toLocaleDateString("en-CA");
@@ -209,12 +216,19 @@ function Dashboard({ hdr, range }: { hdr: Record<string, string>; range: { from:
 
 function Expenses({ hdr, range }: { hdr: Record<string, string>; range: { from: string; to: string } }) {
   const [items, setItems] = useState<Expense[]>([]);
+  const [recs, setRecs] = useState<Recurring[]>([]);
   const [form, setForm] = useState({ category: "Rent", label: "", amount: "", date: ymd(new Date()), note: "" });
-  const load = () =>
+  const [rform, setRform] = useState({ category: "Rent", label: "", amount: "", frequency: "MONTHLY", dayOfMonth: "1", startDate: ymd(new Date()) });
+  const load = () => {
     api
       .get<Expense[]>(`/api/admin/expenses?from=${range.from}&to=${range.to}`, hdr)
       .then(setItems)
       .catch(() => {});
+    api
+      .get<Recurring[]>(`/api/admin/recurring-expenses`, hdr)
+      .then(setRecs)
+      .catch(() => {});
+  };
   useEffect(() => {
     load(); /* eslint-disable-next-line */
   }, [range.from, range.to]);
@@ -230,11 +244,81 @@ function Expenses({ hdr, range }: { hdr: Record<string, string>; range: { from: 
     await api.delete(`/api/admin/expenses/${id}`, hdr);
     load();
   }
+  async function addRec() {
+    if (!rform.amount || !rform.startDate) return;
+    await api.post("/api/admin/recurring-expenses", { ...rform, amount: Number(rform.amount), dayOfMonth: Number(rform.dayOfMonth) }, hdr);
+    setRform({ ...rform, label: "", amount: "" });
+    load();
+  }
+  async function delRec(id: number) {
+    await api.delete(`/api/admin/recurring-expenses/${id}`, hdr);
+    load();
+  }
+  async function toggleRec(r: Recurring) {
+    await api.patch(`/api/admin/recurring-expenses/${r.id}`, { active: !r.active }, hdr);
+    load();
+  }
 
   return (
     <div className="space-y-4">
+      {/* Recurring — set up once, posted automatically each period */}
       <div className="card p-4">
-        <p className="font-display text-brand-dark font-bold">Add an expense</p>
+        <p className="font-display text-brand-dark font-bold">🔁 Recurring expenses</p>
+        <p className="text-muted mt-0.5 text-sm">Set up rent, wifi or electricity once — they're added automatically each period, so you never re-enter them.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <select value={rform.category} onChange={(e) => setRform({ ...rform, category: e.target.value })} className="input">
+            {EXPENSE_CATS.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+          <input value={rform.label} onChange={(e) => setRform({ ...rform, label: e.target.value })} placeholder="Description (e.g. Wifi)" className="input" />
+          <input type="number" value={rform.amount} onChange={(e) => setRform({ ...rform, amount: e.target.value })} placeholder="Amount $" className="input" />
+          <select value={rform.frequency} onChange={(e) => setRform({ ...rform, frequency: e.target.value })} className="input">
+            {FREQ.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+          <label className="text-muted text-xs">
+            Day of month
+            <input type="number" min={1} max={28} value={rform.dayOfMonth} onChange={(e) => setRform({ ...rform, dayOfMonth: e.target.value })} className="input mt-1" />
+          </label>
+          <label className="text-muted text-xs">
+            Starts
+            <input type="date" value={rform.startDate} onChange={(e) => setRform({ ...rform, startDate: e.target.value })} className="input mt-1" />
+          </label>
+        </div>
+        <button onClick={addRec} className="btn btn-primary mt-3 px-5 py-2">
+          + Add recurring expense
+        </button>
+
+        {recs.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {recs.map((r) => (
+              <div key={r.id} className={`border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 text-sm last:border-0 ${r.active ? "" : "opacity-60"}`}>
+                <span className="bg-surface-2 text-muted rounded-full px-2 py-0.5 text-xs font-semibold">{r.category}</span>
+                <span className="text-ink font-semibold">{r.label || "—"}</span>
+                <span className="text-muted text-xs">
+                  {freqLabel(r.frequency)} · day {r.dayOfMonth}
+                  {r.active ? "" : " · paused"}
+                </span>
+                <span className="text-ink ml-auto font-semibold">{money(r.amount)}</span>
+                <button onClick={() => toggleRec(r)} className="text-brand-dark text-xs font-semibold">
+                  {r.active ? "Pause" : "Resume"}
+                </button>
+                <button onClick={() => delRec(r.id)} className="text-xs font-semibold text-red-500">
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* One-off expense */}
+      <div className="card p-4">
+        <p className="font-display text-brand-dark font-bold">Add a one-off expense</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input">
             {EXPENSE_CATS.map((c) => (
@@ -268,6 +352,7 @@ function Expenses({ hdr, range }: { hdr: Record<string, string>; range: { from: 
               <div key={e.id} className="border-border flex items-center gap-3 border-b pb-2 text-sm last:border-0">
                 <span className="bg-surface-2 text-muted rounded-full px-2 py-0.5 text-xs font-semibold">{e.category}</span>
                 <span className="text-ink font-semibold">{e.label || "—"}</span>
+                {(e.recurringId || e.note === "Recurring") && <span className="text-brand-dark text-xs font-semibold" title="Auto-added recurring expense">🔁</span>}
                 <span className="text-muted text-xs">{e.date}</span>
                 <span className="text-ink ml-auto font-semibold">{money(e.amount)}</span>
                 <button onClick={() => del(e.id)} className="text-xs font-semibold text-red-500">

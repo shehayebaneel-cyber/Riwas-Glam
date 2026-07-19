@@ -2126,11 +2126,87 @@ app.get("/api/images/:id", async (req, res) => {
 });
 
 // ---- Finances: expenses + revenue/profit analytics ----
+
+// Materialise any due occurrences of the owner's recurring expenses (rent/wifi/electricity)
+// up to today. Idempotent — an occurrence is keyed by (recurringId, period) so it's created
+// once. Called at the start of the finance read endpoints, so the owner never re-enters them.
+const RECUR_STEP: Record<string, number> = { MONTHLY: 1, QUARTERLY: 3, YEARLY: 12 };
+async function ensureRecurringExpenses() {
+  const todayStr = beirutToday();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const recs = await prisma.recurringExpense.findMany({ where: { active: true } });
+  for (const r of recs) {
+    if (!isDate(r.startDate)) continue;
+    const step = RECUR_STEP[r.frequency] ?? 1;
+    const sy = Number(r.startDate.slice(0, 4));
+    const sm = Number(r.startDate.slice(5, 7)) - 1; // 0-based month
+    for (let k = 0; k < 600; k++) {
+      const d = new Date(sy, sm + k * step, 1);
+      const oy = d.getFullYear(),
+        om = d.getMonth();
+      const dim = new Date(oy, om + 1, 0).getDate();
+      const day = Math.min(Math.max(1, r.dayOfMonth), dim);
+      const dateStr = `${oy}-${pad(om + 1)}-${pad(day)}`;
+      if (dateStr > todayStr) break; // not due yet — stop (later occurrences are further out)
+      const period = `${oy}-${pad(om + 1)}`;
+      const exists = await prisma.expense.findFirst({ where: { recurringId: r.id, period } });
+      if (!exists) {
+        await prisma.expense.create({
+          data: { category: r.category, label: r.label, amount: r.amount, date: dateStr, note: "Recurring", recurringId: r.id, period },
+        });
+      }
+    }
+  }
+}
+
 app.get("/api/admin/expenses", requireAdmin, async (req, res) => {
+  await ensureRecurringExpenses();
   const from = STR(req.query.from),
     to = STR(req.query.to);
   const where = isDate(from) && isDate(to) ? { date: { gte: from, lte: to } } : {};
   res.json(await prisma.expense.findMany({ where, orderBy: [{ date: "desc" }, { id: "desc" }] }));
+});
+
+// Recurring expense rules — set up once, auto-posted each period.
+app.get("/api/admin/recurring-expenses", requireAdmin, async (_req, res) => {
+  res.json(await prisma.recurringExpense.findMany({ orderBy: [{ active: "desc" }, { id: "desc" }] }));
+});
+app.post("/api/admin/recurring-expenses", requireAdmin, async (req, res) => {
+  const b = req.body ?? {};
+  const startDate = STR(b.startDate);
+  if (!isDate(startDate)) return res.status(400).json({ error: "A valid start date is required." });
+  const frequency = ["MONTHLY", "QUARTERLY", "YEARLY"].includes(STR(b.frequency)) ? STR(b.frequency) : "MONTHLY";
+  const rec = await prisma.recurringExpense.create({
+    data: {
+      category: STR(b.category, 40) || "Other",
+      label: STR(b.label, 120),
+      amount: Math.max(0, NUM(b.amount, 0)),
+      frequency,
+      dayOfMonth: Math.min(28, Math.max(1, Math.round(NUM(b.dayOfMonth, 1)))),
+      startDate,
+      active: true,
+    },
+  });
+  await ensureRecurringExpenses();
+  res.json(rec);
+});
+app.patch("/api/admin/recurring-expenses/:id", requireAdmin, async (req, res) => {
+  const b = req.body ?? {};
+  const data: Record<string, unknown> = {};
+  if (b.category !== undefined) data.category = STR(b.category, 40);
+  if (b.label !== undefined) data.label = STR(b.label, 120);
+  if (b.amount !== undefined) data.amount = Math.max(0, NUM(b.amount, 0));
+  if (b.frequency !== undefined && ["MONTHLY", "QUARTERLY", "YEARLY"].includes(STR(b.frequency))) data.frequency = STR(b.frequency);
+  if (b.dayOfMonth !== undefined) data.dayOfMonth = Math.min(28, Math.max(1, Math.round(NUM(b.dayOfMonth, 1))));
+  if (b.active !== undefined) data.active = !!b.active;
+  const rec = await prisma.recurringExpense.update({ where: { id: Number(req.params.id) }, data });
+  if (rec.active) await ensureRecurringExpenses();
+  res.json(rec);
+});
+app.delete("/api/admin/recurring-expenses/:id", requireAdmin, async (req, res) => {
+  // Remove the rule but keep already-generated expenses as history.
+  await prisma.recurringExpense.delete({ where: { id: Number(req.params.id) } }).catch(() => {});
+  res.json({ ok: true });
 });
 app.post("/api/admin/expenses", requireAdmin, async (req, res) => {
   const b = req.body ?? {};
@@ -2159,6 +2235,7 @@ app.delete("/api/admin/expenses/:id", requireAdmin, async (req, res) => {
 
 // Revenue & profit for a date range. Profit = revenue − materials − commissions − expenses.
 app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
+  await ensureRecurringExpenses();
   const from = STR(req.query.from),
     to = STR(req.query.to);
   if (!isDate(from) || !isDate(to)) return res.status(400).json({ error: "from and to (YYYY-MM-DD) are required." });
@@ -2225,6 +2302,7 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
 
 // ---- Admin home dashboard (all widgets + charts in one call) ----
 app.get("/api/admin/dashboard", requireAdmin, async (_req, res) => {
+  await ensureRecurringExpenses();
   const pad = (n: number) => String(n).padStart(2, "0");
   const todayStr = beirutToday();
   const y = Number(todayStr.slice(0, 4)),
