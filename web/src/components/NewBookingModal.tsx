@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { todayIso } from "../lib/time";
+import { todayIso, timeOptions } from "../lib/time";
 import type { Category, Staff } from "../types";
 
 type Pkg = { id: number; title: string };
@@ -183,7 +183,14 @@ export function NewBookingModal({
             </label>
             <label className="block">
               <span className="text-muted mb-1 block text-xs font-semibold">Time</span>
-              <input type="time" value={f.time} onChange={(e) => set("time", e.target.value)} className="input" />
+              <select value={f.time} onChange={(e) => set("time", e.target.value)} className="input">
+                <option value="">Pick a time…</option>
+                {timeOptions().map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
           <input value={f.customerName} onChange={(e) => set("customerName", e.target.value)} placeholder="Customer name *" className="input" />

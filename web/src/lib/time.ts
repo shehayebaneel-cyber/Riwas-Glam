@@ -45,6 +45,31 @@ export const weekOf = (s: string) => {
   });
 };
 
+/** Selectable booking times: 24-hour values ("13:30") with clear 12-hour labels
+ *  ("1:30 PM"). Used by the admin booking forms so an afternoon booking can never
+ *  be saved as AM by mistake. Defaults span 8:00 AM–9:00 PM in 15-min steps. */
+export function timeOptions(stepMin = 15, startMin = 8 * 60, endMin = 21 * 60): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = [];
+  for (let t = startMin; t <= endMin; t += stepMin) {
+    const h = Math.floor(t / 60);
+    const m = t % 60;
+    const value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const ampm = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    out.push({ value, label: `${h12}:${String(m).padStart(2, "0")} ${ampm}` });
+  }
+  return out;
+}
+
+/** A friendly 12-hour label for a stored 24h "HH:MM" (e.g. "13:30" → "1:30 PM"). */
+export function label12h(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (Number.isNaN(h)) return hhmm;
+  const ampm = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 /** Minutes since midnight, right now, in Beirut. */
 export const nowMinutes = () => {
   const p = new Intl.DateTimeFormat("en-GB", { timeZone: SALON_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());

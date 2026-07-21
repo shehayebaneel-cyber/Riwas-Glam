@@ -24,6 +24,7 @@ import { GalleryAdmin } from "../components/GalleryAdmin";
 import { NotificationsAdmin } from "../components/NotificationsAdmin";
 import { BranchesAdmin } from "../components/BranchesAdmin";
 import { NewBookingModal } from "../components/NewBookingModal";
+import { EditBookingModal } from "../components/EditBookingModal";
 import { GiftCardPayModal } from "../components/GiftCardPayModal";
 import { PaymentsAdmin } from "../components/PaymentsAdmin";
 import { AlertsBell } from "../components/AlertsBell";
@@ -176,6 +177,7 @@ export function Admin() {
   const [date, setDate] = useState(todayIso());
   const [items, setItems] = useState<Appointment[]>([]);
   const [newBooking, setNewBooking] = useState(false);
+  const [editBooking, setEditBooking] = useState<Appointment | null>(null);
   const [giftPayFor, setGiftPayFor] = useState<Appointment | null>(null);
   const [tab, setTab] = useState<Tab>("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -586,6 +588,17 @@ export function Admin() {
                   }}
                 />
               )}
+              {editBooking && (
+                <EditBookingModal
+                  adminKey={key}
+                  appt={editBooking}
+                  onClose={() => setEditBooking(null)}
+                  onSaved={() => {
+                    setEditBooking(null);
+                    load();
+                  }}
+                />
+              )}
               {giftPayFor && (
                 <GiftCardPayModal
                   adminKey={key}
@@ -697,6 +710,12 @@ export function Admin() {
                             )}
                             {a.status === "CONFIRMED" && (
                               <>
+                                <button
+                                  onClick={() => setEditBooking(a)}
+                                  className="bg-surface-2 text-brand-dark hover:bg-brand-soft/60 rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                                >
+                                  ✏️ Edit
+                                </button>
                                 <button
                                   onClick={() => setStatus(a, "COMPLETED")}
                                   className="bg-surface-2 rounded-full px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/15"

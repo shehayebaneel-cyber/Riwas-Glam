@@ -1456,6 +1456,52 @@ app.get("/api/admin/appointments", requireAdmin, async (req, res) => {
 app.patch("/api/admin/appointments/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const b = req.body ?? {};
+  // Full edit of a booking (time / date / specialist / customer). The front desk
+  // is trusted to double-book, so availability is NOT enforced here. A multi-
+  // service visit (shared groupId) moves together, shifted by the same delta.
+  if (b.edit) {
+    const appt = await prisma.appointment.findUnique({ where: { id } });
+    if (!appt) return res.status(404).json({ error: "Not found." });
+    const group = appt.groupId ? await prisma.appointment.findMany({ where: { groupId: appt.groupId } }) : [appt];
+    const date = b.date !== undefined ? STR(b.date, 10) : appt.date;
+    const newTime = b.time !== undefined ? STR(b.time, 5) : appt.time;
+    if (!isDate(date) || !isTime(newTime)) return res.status(400).json({ error: "Please pick a valid date and time." });
+    const delta = toMin(newTime) - toMin(appt.time);
+    const staffId = b.staffId !== undefined ? (b.staffId ? Number(b.staffId) : null) : appt.staffId;
+    const staffChanged = staffId !== appt.staffId;
+    let staffName = appt.staffName;
+    let commissionPct = appt.commissionPct;
+    if (staffChanged) {
+      if (staffId != null) {
+        const s = await prisma.staff.findUnique({ where: { id: staffId } });
+        if (!s) return res.status(400).json({ error: "That specialist doesn't exist." });
+        staffName = s.name;
+        commissionPct = s.commissionPct;
+      } else staffName = "";
+    }
+    const name = b.customerName !== undefined ? STR(b.customerName, 80) : undefined;
+    const phone = b.customerPhone !== undefined ? STR(b.customerPhone, 40) : undefined;
+    const email = b.customerEmail !== undefined ? STR(b.customerEmail, 120) : undefined;
+    const note = b.note !== undefined ? STR(b.note, 500) : undefined;
+    if (name !== undefined && !name.trim()) return res.status(400).json({ error: "Customer name can't be empty." });
+    for (const g of group) {
+      await prisma.appointment.update({
+        where: { id: g.id },
+        data: {
+          date,
+          time: toHHMM(toMin(g.time) + delta),
+          staffId,
+          staffName,
+          ...(staffChanged ? { commissionPct, commissionAmount: round2((g.price * commissionPct) / 100) } : {}),
+          ...(name !== undefined ? { customerName: name } : {}),
+          ...(phone !== undefined ? { customerPhone: phone } : {}),
+          ...(email !== undefined ? { customerEmail: email } : {}),
+          ...(note !== undefined && g.id === appt.id ? { note } : {}),
+        },
+      });
+    }
+    return res.json(await prisma.appointment.findUnique({ where: { id } }));
+  }
   if (b.actualMinutes !== undefined)
     await prisma.appointment.update({ where: { id }, data: { actualMinutes: Math.max(0, Math.round(NUM(b.actualMinutes, 0))) } }).catch(() => {});
   // Discount / "paid less": set the final price. Revenue + commission derive from
