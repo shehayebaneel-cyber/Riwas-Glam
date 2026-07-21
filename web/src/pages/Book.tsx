@@ -462,20 +462,28 @@ export function Book() {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {slots.map((t) => (
-                        <button
-                          key={t}
-                          onClick={() => {
-                            setTime(t);
-                            setStep(4);
-                          }}
-                          className={`chip ${time === t ? "chip-active" : ""}`}
-                        >
-                          {t}
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {slots.map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => {
+                              setTime(t);
+                              setStep(4);
+                            }}
+                            className={`chip ${time === t ? "chip-active" : ""}`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-muted mt-3 text-center text-sm">
+                        {t("Don't see a time that works?")}{" "}
+                        <button onClick={() => setWaitOpen(true)} className="text-brand font-semibold hover:underline">
+                          {t("join the waiting list →")}
                         </button>
-                      ))}
-                    </div>
+                      </p>
+                    </>
                   )}
                 </div>
               )}

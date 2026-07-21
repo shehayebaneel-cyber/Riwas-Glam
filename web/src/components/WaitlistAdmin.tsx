@@ -25,6 +25,7 @@ export function WaitlistAdmin({ adminKey }: { adminKey: string }) {
   const hdr = { "x-admin-key": adminKey };
   const [filter, setFilter] = useState("WAITING");
   const [items, setItems] = useState<Entry[]>([]);
+  const [adding, setAdding] = useState(false);
   const load = () =>
     api
       .get<Entry[]>(`/api/admin/waitlist?status=${filter}`, hdr)
@@ -47,13 +48,29 @@ export function WaitlistAdmin({ adminKey }: { adminKey: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-        {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`chip whitespace-nowrap ${filter === f ? "chip-active" : ""}`}>
-            {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
-          </button>
-        ))}
+      <div className="flex items-center gap-2">
+        <div className="no-scrollbar flex flex-1 gap-2 overflow-x-auto pb-1">
+          {FILTERS.map((f) => (
+            <button key={f} onClick={() => setFilter(f)} className={`chip whitespace-nowrap ${filter === f ? "chip-active" : ""}`}>
+              {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setAdding(true)} className="btn btn-primary whitespace-nowrap px-3 py-1.5 text-xs">
+          + Add
+        </button>
       </div>
+      {adding && (
+        <AddWaitlistModal
+          adminKey={adminKey}
+          onClose={() => setAdding(false)}
+          onAdded={() => {
+            setAdding(false);
+            setFilter("WAITING");
+            load();
+          }}
+        />
+      )}
       {items.length === 0 && <p className="card text-muted p-8 text-center">No one on the waiting list here.</p>}
       {items.map((e) => (
         <div key={e.id} className="card p-4">
@@ -98,6 +115,65 @@ export function WaitlistAdmin({ adminKey }: { adminKey: string }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AddWaitlistModal({ adminKey, onClose, onAdded }: { adminKey: string; onClose: () => void; onAdded: () => void }) {
+  const hdr = { "x-admin-key": adminKey };
+  const [f, setF] = useState({ name: "", phone: "", serviceName: "", preferredDate: "", preferredTime: "", note: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k: string, v: string) => setF({ ...f, [k]: v });
+
+  async function save() {
+    if (!f.name.trim() || !f.phone.trim()) {
+      setErr("Name and phone are required.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      await api.post("/api/waitlist", f, hdr);
+      onAdded();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't add to the waitlist.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      <div className="bg-surface w-full max-w-sm rounded-t-[1.5rem] p-5 shadow-2xl sm:rounded-[1.5rem]" onClick={(e) => e.stopPropagation()}>
+        <p className="font-display text-ink text-lg font-bold">Add to waiting list</p>
+        <p className="text-muted mt-0.5 text-sm">For a phone/walk-in customer when the slot they want is full.</p>
+        <div className="mt-3 space-y-2">
+          <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Customer name *" className="input" />
+          <input value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Phone *" className="input" />
+          <input value={f.serviceName} onChange={(e) => set("serviceName", e.target.value)} placeholder="Service they want (optional)" className="input" />
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-muted mb-1 block text-xs font-semibold">Preferred date</span>
+              <input type="date" value={f.preferredDate} onChange={(e) => set("preferredDate", e.target.value)} className="input" />
+            </label>
+            <label className="block">
+              <span className="text-muted mb-1 block text-xs font-semibold">Preferred time</span>
+              <input value={f.preferredTime} onChange={(e) => set("preferredTime", e.target.value)} placeholder="e.g. after 5pm" className="input" />
+            </label>
+          </div>
+          <textarea value={f.note} onChange={(e) => set("note", e.target.value)} rows={2} placeholder="Note (optional)" className="input" />
+          {err && <p className="text-sm font-medium text-red-600">{err}</p>}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={save} disabled={busy} className="btn btn-primary flex-1 py-2.5 disabled:opacity-60">
+            {busy ? "Adding…" : "Add to list"}
+          </button>
+          <button onClick={onClose} className="btn btn-ghost px-5 py-2.5">
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
