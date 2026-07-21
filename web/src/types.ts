@@ -119,5 +119,6 @@ export interface Appointment {
   paymentMethod?: string;
   paymentStatus?: string;
   addOns?: { name: string; price: number }[];
+  groupId?: string;
   createdAt: string;
 }
